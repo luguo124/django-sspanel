@@ -3,7 +3,7 @@ from .common import BASE_DIR
 # 定时任务相关
 CRONJOBS = [
     (
-        "* 1 * * *",
+        "*/1 * * * *",
         "django.core.management.call_command",
         ["run_cron_job"],
         {"jobname": "check_user_state"},
@@ -45,7 +45,7 @@ CRONJOBS = [
         ">>" + BASE_DIR + "/logs/cron.log",
     ),
     (
-        "*/30 * * * *",
+        "*/5 * * * *",
         "django.core.management.call_command",
         ["run_cron_job"],
         {"jobname": "make_up_lost_order"},

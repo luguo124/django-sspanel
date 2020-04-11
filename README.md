@@ -1,13 +1,18 @@
 # django-sspanel
 用diango开发的全新的shadowsocks网络面板
 
-专用SS后端：[地址：](https://github.com/Ehco1996/aioshadowsocks)
 
-专用V2ray后端：[地址：](https://github.com/Ehco1996/v2scar)
+* 视频安装教程:[地址](https://youtu.be/BRHcdGeufvY)
 
-Telegram group : [invite link](https://t.me/Ehcobreakwa11)
+* 专用SS后端:[地址](https://github.com/Ehco1996/aioshadowsocks)
 
-Wiki: [Wiki](https://github.com/Ehco1996/django-sspanel/wiki)
+* 专用V2ray后端:[地址](https://github.com/Ehco1996/v2scar)
+
+* 节点对接教程: [地址](https://github.com/Ehco1996/django-sspanel/wiki/%5B%E6%9C%80%E6%96%B0%E6%95%99%E7%A8%8B-2020-2-8%5D%E5%AF%B9%E6%8E%A5%E5%90%8E%E7%AB%AF%E8%8A%82%E7%82%B9%E6%95%99%E7%A8%8B)
+
+* Telegram group : [invite link](https://t.me/Ehcobreakwa11)
+
+* Wiki: [Wiki](https://github.com/Ehco1996/django-sspanel/wiki)
 
 
 ## 项目说明
@@ -47,11 +52,6 @@ Wiki: [Wiki](https://github.com/Ehco1996/django-sspanel/wiki)
 * 节点管理：
 
 ![](https://user-images.githubusercontent.com/24697284/53059234-14120a00-34f1-11e9-8937-ea56cf4077ed.png)
-
-
-* Django-jet 后台:
-
-![](https://user-images.githubusercontent.com/24697284/53059235-14120a00-34f1-11e9-81ea-69bbb2e445d2.png)
 
 
 ## 部署教程：

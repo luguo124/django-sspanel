@@ -2,7 +2,6 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.forms import ModelForm
 
-from apps.encoder import encoder
 from apps.sspanel.models import (
     Announcement,
     Goods,
@@ -10,7 +9,6 @@ from apps.sspanel.models import (
     User,
     SSNode,
     VmessNode,
-    UserSSConfig,
 )
 
 
@@ -86,7 +84,7 @@ class RegisterForm(UserCreationForm):
     def _clean_ref(self):
         ref = self.cleaned_data.get("ref")
         try:
-            user_id = encoder.string2int(ref)
+            user_id = int(ref)
         except ValueError:
             raise forms.ValidationError("ref不正确")
 
@@ -132,6 +130,7 @@ class SSNodeForm(ModelForm):
         widgets = {
             "node_id": forms.NumberInput(attrs={"class": "input"}),
             "level": forms.NumberInput(attrs={"class": "input"}),
+            "enlarge_scale": forms.NumberInput(attrs={"class": "input"}),
             "name": forms.TextInput(attrs={"class": "input"}),
             "info": forms.TextInput(attrs={"class": "input"}),
             "server": forms.TextInput(attrs={"class": "input"}),
@@ -152,18 +151,22 @@ class VmessNodeForm(ModelForm):
         widgets = {
             "node_id": forms.NumberInput(attrs={"class": "input"}),
             "level": forms.NumberInput(attrs={"class": "input"}),
+            "enlarge_scale": forms.NumberInput(attrs={"class": "input"}),
             "name": forms.TextInput(attrs={"class": "input"}),
             "inbound_tag": forms.TextInput(attrs={"class": "input"}),
             "alter_id": forms.NumberInput(attrs={"class": "input"}),
             "port": forms.NumberInput(attrs={"class": "input"}),
             "info": forms.TextInput(attrs={"class": "input"}),
             "server": forms.TextInput(attrs={"class": "input"}),
+            "listen_host": forms.TextInput(attrs={"class": "input"}),
             "grpc_host": forms.TextInput(attrs={"class": "input"}),
             "grpc_port": forms.TextInput(attrs={"class": "input"}),
             "country": forms.Select(attrs={"class": "input"}),
             "used_traffic": forms.NumberInput(attrs={"class": "input"}),
             "total_traffic": forms.NumberInput(attrs={"class": "input"}),
             "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "ws_host": forms.TextInput(attrs={"class": "input"}),
+            "ws_path": forms.TextInput(attrs={"class": "input"}),
         }
 
 
@@ -182,21 +185,19 @@ class AnnoForm(ModelForm):
 class UserForm(ModelForm):
     class Meta:
         model = User
-        fields = ["balance", "level", "level_expire_time"]
+        fields = [
+            "balance",
+            "level",
+            "level_expire_time",
+            "ss_port",
+            "ss_password",
+            "ss_method",
+        ]
         widgets = {
             "balance": forms.NumberInput(attrs={"class": "input"}),
             "level": forms.NumberInput(attrs={"class": "input"}),
             "level_expire_time": forms.DateTimeInput(attrs={"class": "input"}),
-        }
-
-
-class UserSSConfigForm(ModelForm):
-    class Meta:
-        model = UserSSConfig
-        fields = ["port", "password", "method", "enable"]
-        widgets = {
-            "port": forms.NumberInput(attrs={"class": "input"}),
-            "password": forms.TextInput(attrs={"class": "input"}),
-            "method": forms.Select(attrs={"class": "input"}),
-            "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "ss_port": forms.NumberInput(attrs={"class": "input"}),
+            "ss_password": forms.TextInput(attrs={"class": "input"}),
+            "ss_method": forms.Select(attrs={"class": "input"}),
         }

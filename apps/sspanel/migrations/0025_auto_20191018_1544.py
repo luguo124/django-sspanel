@@ -5,14 +5,14 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ('sspanel', '0024_auto_20191017_1326'),
-    ]
+    dependencies = [("sspanel", "0024_auto_20191017_1326")]
 
     operations = [
         migrations.AlterField(
-            model_name='usertraffic',
-            name='last_use_time',
-            field=models.DateTimeField(blank=True, db_index=True, null=True, verbose_name='上次使用时间'),
-        ),
+            model_name="usertraffic",
+            name="last_use_time",
+            field=models.DateTimeField(
+                blank=True, db_index=True, null=True, verbose_name="上次使用时间"
+            ),
+        )
     ]
