@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.forms import ModelForm
 
+from apps.constants import AEAD_METHODS
 from apps.sspanel.models import (
     Announcement,
     Goods,
@@ -51,6 +52,9 @@ class RegisterForm(UserCreationForm):
         super().__init__(*args, **kw)
         if "ref" in self.data or "ref" in self.initial.keys():
             self.fields.pop("invitecode")
+            self.fields["ref"].label = "not show"
+            self.fields["ref"].help_text = None
+            self.fields["ref"].widget = forms.HiddenInput()
         else:
             self.fields.pop("ref")
 
@@ -132,6 +136,7 @@ class SSNodeForm(ModelForm):
             "level": forms.NumberInput(attrs={"class": "input"}),
             "enlarge_scale": forms.NumberInput(attrs={"class": "input"}),
             "name": forms.TextInput(attrs={"class": "input"}),
+            "port": forms.TextInput(attrs={"class": "input"}),
             "info": forms.TextInput(attrs={"class": "input"}),
             "server": forms.TextInput(attrs={"class": "input"}),
             "method": forms.Select(attrs={"class": "input"}),
@@ -141,7 +146,27 @@ class SSNodeForm(ModelForm):
             "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
             "custom_method": forms.CheckboxInput(attrs={"class": "checkbox"}),
             "speed_limit": forms.NumberInput(attrs={"class": "input"}),
+            "ehco_listen_host": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_port": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_type": forms.Select(attrs={"class": "input"}),
+            "ehco_transport_type": forms.Select(attrs={"class": "input"}),
+            "enable_ehco_lb": forms.CheckboxInput(attrs={"class": "checkbox"}),
         }
+
+    def _clean_one_port_many_user(self):
+        if (
+            self.cleaned_data.get("port")
+            and self.cleaned_data.get("method") not in AEAD_METHODS
+        ):
+            raise forms.ValidationError("当前加密方式不支持单端口多用户")
+
+    def clean_port(self):
+        self._clean_one_port_many_user()
+        return self.cleaned_data.get("port")
+
+    def clean_method(self):
+        self._clean_one_port_many_user()
+        return self.cleaned_data.get("method")
 
 
 class VmessNodeForm(ModelForm):
@@ -155,7 +180,8 @@ class VmessNodeForm(ModelForm):
             "name": forms.TextInput(attrs={"class": "input"}),
             "inbound_tag": forms.TextInput(attrs={"class": "input"}),
             "alter_id": forms.NumberInput(attrs={"class": "input"}),
-            "port": forms.NumberInput(attrs={"class": "input"}),
+            "service_port": forms.NumberInput(attrs={"class": "input"}),
+            "client_port": forms.NumberInput(attrs={"class": "input"}),
             "info": forms.TextInput(attrs={"class": "input"}),
             "server": forms.TextInput(attrs={"class": "input"}),
             "listen_host": forms.TextInput(attrs={"class": "input"}),
@@ -167,6 +193,11 @@ class VmessNodeForm(ModelForm):
             "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
             "ws_host": forms.TextInput(attrs={"class": "input"}),
             "ws_path": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_host": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_port": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_type": forms.Select(attrs={"class": "input"}),
+            "ehco_transport_type": forms.Select(attrs={"class": "input"}),
+            "enable_ehco_lb": forms.CheckboxInput(attrs={"class": "checkbox"}),
         }
 
 

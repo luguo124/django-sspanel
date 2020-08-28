@@ -5,9 +5,10 @@ from . import models
 
 
 class UserAdmin(admin.ModelAdmin):
-    list_display = ["username", "id", "level", "balance", "used_percentage"]
+    list_display = ["username", "id", "level", "balance", "used_percentage", "sub_link"]
     search_fields = ["username", "email", "id"]
     list_filter = ["level"]
+    readonly_fields = ["sub_link"]
 
 
 class UserOrderAdmin(admin.ModelAdmin):
@@ -27,12 +28,13 @@ class UserOrderAdmin(admin.ModelAdmin):
 class UserOnLineIpLogAdmin(admin.ModelAdmin):
     list_display = ["user", "user_id", "node_id", "ip", "created_at"]
     search_fields = ["user_id"]
+    list_filter = ["user_id", "node_id"]
 
 
 class UserTrafficLogAdmin(admin.ModelAdmin):
 
     list_display = ["user", "user_id", "node_id", "total_traffic", "date"]
-    search_fields = ["user_id", "node_id"]
+    search_fields = ["user_id"]
     list_filter = ["date", "node_type", "node_id"]
 
 
@@ -56,12 +58,13 @@ class NodeOnlineLogAdmin(admin.ModelAdmin):
         "active_tcp_connections",
         "created_at",
     ]
-    search_fields = ["node_id", "node_type"]
+    list_filter = ["node_id", "node_type"]
 
 
 class SSNodeAdmin(admin.ModelAdmin):
     list_display = [
         "name",
+        "port",
         "node_id",
         "level",
         "server",
@@ -85,15 +88,47 @@ class VmessNodeAdmin(admin.ModelAdmin):
     ]
 
 
-class RelayRuleAdmin(admin.ModelAdmin):
-    list_display = ["vmess_node", "relay_host", "relay_port", "remark", "isp"]
+class RelayNodeAdmin(admin.ModelAdmin):
+
+    list_display = [
+        "node_id",
+        "name",
+        "isp",
+        "server",
+        "rules_count",
+        "enable",
+        "api_endpoint",
+    ]
+
+
+class VmessRelayRuleAdmin(admin.ModelAdmin):
+    list_display = [
+        "vmess_node",
+        "relay_node",
+        "relay_host",
+        "relay_port",
+        "remark",
+        "enable",
+    ]
     ordering = ["vmess_node"]
 
 
+class SSRelayRuleAdmin(admin.ModelAdmin):
+    list_display = [
+        "ss_node",
+        "relay_node",
+        "relay_host",
+        "relay_port",
+        "remark",
+        "enable",
+    ]
+    ordering = ["ss_node"]
+
+
 class PurchaseHistoryAdmin(admin.ModelAdmin):
-    list_display = ["good", "user", "money", "purchtime"]
+    list_display = ["good_name", "user", "money", "created_at"]
     search_fields = ["user"]
-    list_filter = ["good", "purchtime"]
+    list_filter = ["good_name", "created_at"]
 
 
 class InviteCodeAdmin(admin.ModelAdmin):
@@ -120,6 +155,16 @@ class EmailSendLogAdmin(admin.ModelAdmin):
     search_fields = ["user__username", "subject"]
 
 
+class RebateRecordAdmin(admin.ModelAdmin):
+    list_display = ["user", "consumer_id", "money", "created_at"]
+    search_fields = ["user_id", "consumer_id"]
+
+
+class TicketAdmin(admin.ModelAdmin):
+    list_display = ["user", "title", "status"]
+    search_fields = ["title", "user__id"]
+
+
 # Register your models here.
 admin.site.register(models.User, UserAdmin)
 admin.site.register(models.UserOrder, UserOrderAdmin)
@@ -130,7 +175,9 @@ admin.site.register(models.UserRefLog, UserRefLogAdmin)
 admin.site.register(models.NodeOnlineLog, NodeOnlineLogAdmin)
 admin.site.register(models.SSNode, SSNodeAdmin)
 admin.site.register(models.VmessNode, VmessNodeAdmin)
-admin.site.register(models.RelayRule, RelayRuleAdmin)
+admin.site.register(models.RelayNode, RelayNodeAdmin)
+admin.site.register(models.VmessRelayRule, VmessRelayRuleAdmin)
+admin.site.register(models.SSRelayRule, SSRelayRuleAdmin)
 
 admin.site.register(models.InviteCode, InviteCodeAdmin)
 admin.site.register(models.Donate, DonateAdmin)
@@ -138,8 +185,9 @@ admin.site.register(models.MoneyCode, MoneyCodeAdmin)
 admin.site.register(models.Goods, GoodsAdmin)
 admin.site.register(models.PurchaseHistory, PurchaseHistoryAdmin)
 admin.site.register(models.Announcement)
-admin.site.register(models.Ticket)
+admin.site.register(models.Ticket, TicketAdmin)
 admin.site.register(models.EmailSendLog, EmailSendLogAdmin)
+admin.site.register(models.RebateRecord, RebateRecordAdmin)
 
 
 admin.site.unregister(Group)

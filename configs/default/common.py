@@ -61,10 +61,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
-USE_L10N = True
+
 USE_TZ = True
-TIME_ZONE = "Asia/Shanghai"
+USE_L10N = True
 LANGUAGE_CODE = "zh-hans"
+TIME_ZONE = "Asia/Shanghai"
 
 # session 设置
 SESSION_COOKIE_AGE = 60 * 60 * 24  # 一天

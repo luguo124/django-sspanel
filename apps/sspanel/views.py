@@ -41,9 +41,8 @@ class RegisterView(View):
     def get(self, request):
         if request.user.is_authenticated:
             return HttpResponseRedirect(reverse("sspanel:userinfo"))
-        ref = request.GET.get("ref")
-        if ref:
-            form = RegisterForm(initial={"ref": ref})
+        if request.GET.get("ref"):
+            form = RegisterForm(initial={"ref": request.GET.get("ref")})
         else:
             form = RegisterForm(initial={"invitecode": request.GET.get("invitecode")})
         return render(request, "sspanel/register.html", {"form": form})
@@ -144,8 +143,6 @@ class UserInfoView(LoginRequiredMixin, View):
             "max_traffic": max_traffic,
             "themes": THEME_CHOICES,
             "sub_link": user.sub_link,
-            "sub_types": User.SUB_TYPES,
-            "user_sub_type": user.get_sub_type_display(),
             "methods": [m[0] for m in METHOD_CHOICES],
         }
         return render(request, "sspanel/userinfo.html", context=context)

@@ -13,6 +13,7 @@ from apps.sspanel.models import (
     Goods,
     InviteCode,
     NodeOnlineLog,
+    RelayNode,
     SSNode,
     User,
     UserCheckInLog,
@@ -22,7 +23,12 @@ from apps.sspanel.models import (
     UserTrafficLog,
     VmessNode,
 )
-from apps.utils import api_authorized, handle_json_post, traffic_format
+from apps.utils import (
+    api_authorized,
+    handle_json_post,
+    traffic_format,
+    get_current_datetime,
+)
 
 
 class SystemStatusView(View):
@@ -93,7 +99,7 @@ class UserRefChartView(View):
     def get(self, request):
         # 最近10天的
         date = request.GET.get("date")
-        t = pendulum.parse(date) if date else pendulum.now()
+        t = pendulum.parse(date) if date else get_current_datetime()
         date_list = [t.add(days=i).date() for i in range(-7, 3)]
         bar_configs = UserRefLog.gen_bar_chart_configs(request.user.id, date_list)
         return JsonResponse(bar_configs)
@@ -105,8 +111,8 @@ class UserTrafficChartView(View):
         node_id = request.GET.get("node_id", 0)
         node_type = request.GET.get("node_type", "ss")
         user_id = request.user.pk
-        now = pendulum.now()
-        last_week = [now.subtract(days=i).date() for i in range(6, -1, -1)]
+        now = get_current_datetime()
+        last_week = [now.subtract(days=i) for i in range(6, -1, -1)]
         configs = UserTrafficLog.gen_line_chart_configs(
             user_id, node_type, node_id, last_week
         )
@@ -140,7 +146,7 @@ class UserSSConfigView(View):
 
         data = request.json["data"]
         node_total_traffic = 0
-        log_time = pendulum.now()
+        log_time = get_current_datetime()
         active_tcp_connections = 0
         need_clear_cache = False
         user_model_list = []
@@ -157,7 +163,7 @@ class UserSSConfigView(View):
             user.upload_traffic += u
             user.last_use_time = log_time
             user_model_list.append(user)
-            if user.overflow:
+            if user.overflow or user.level < ss_node.level:
                 need_clear_cache = True
             # 个人流量记录
             trafficlog_model_list.append(
@@ -218,7 +224,7 @@ class UserVmessConfigView(View):
         if not node:
             return HttpResponseNotFound()
 
-        log_time = pendulum.now()
+        log_time = get_current_datetime()
         node_total_traffic = 0
         need_clear_cache = False
         trafficlog_model_list = []
@@ -234,7 +240,7 @@ class UserVmessConfigView(View):
             user.upload_traffic += u
             user.last_use_time = log_time
             user_model_list.append(user)
-            if user.overflow:
+            if user.overflow or user.level < node.level:
                 need_clear_cache = True
             # 个人流量记录
             trafficlog_model_list.append(
@@ -262,6 +268,8 @@ class UserVmessConfigView(View):
             NodeOnlineLog.NODE_TYPE_VMESS, node_id, len(request.json["user_traffics"])
         )
         # check node && user traffic
+        if node.overflow:
+            node.enable = False
         if need_clear_cache or node.overflow:
             node.save()
         return JsonResponse(data={})
@@ -276,13 +284,30 @@ class VmessServerConfigView(View):
         return JsonResponse(node.server_config)
 
 
-class RelayServerConfigView(View):
+class EhcoRelayConfigView(View):
+    """中转机器"""
+
     @method_decorator(api_authorized)
     def get(self, request, node_id):
-        node = VmessNode.get_or_none_by_node_id(node_id)
+        node = RelayNode.get_or_none_by_node_id(node_id)
         if not node:
             return HttpResponseNotFound()
-        return JsonResponse(node.relay_config)
+        return JsonResponse(node.get_relay_rules_configs())
+
+
+class EhcoServerConfigView(View):
+    """落地机器"""
+
+    @method_decorator(api_authorized)
+    def get(self, request, node_id):
+        node_type = self.request.GET.get("node_type")
+        if node_type == "ss":
+            node = SSNode.get_or_none_by_node_id(node_id)
+        else:
+            node = VmessNode.get_or_none_by_node_id(node_id)
+        if not node:
+            return HttpResponseNotFound()
+        return JsonResponse(node.get_ehco_server_config())
 
 
 class UserCheckInView(View):
@@ -356,16 +381,6 @@ def change_theme(request):
     user.theme = theme
     user.save()
     res = {"title": "修改成功！", "subtitle": "主题更换成功，刷新页面可见", "status": "success"}
-    return JsonResponse(res)
-
-
-@login_required
-def change_sub_type(request):
-    sub_type = request.POST.get("sub_type")
-    user = request.user
-    user.sub_type = sub_type
-    user.save()
-    res = {"title": "修改成功！", "subtitle": "订阅类型更换成功!", "status": "success"}
     return JsonResponse(res)
 
 
