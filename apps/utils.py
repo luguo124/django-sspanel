@@ -4,11 +4,10 @@ import random
 import time
 from functools import wraps
 
-
+import pendulum
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
-import pendulum
 
 
 def get_random_string(
@@ -87,3 +86,17 @@ def handle_json_post(view_func):
 
 def get_current_datetime() -> pendulum.DateTime:
     return pendulum.now(tz=timezone.get_current_timezone())
+
+
+def gen_date_list(t: pendulum.DateTime, days: int = 6):
+    """根据日期和天数生成日期列表"""
+    return [t.subtract(days=i) for i in range(days, -1, -1)]
+
+
+def get_client_ip(request):
+    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(",")[0]
+    else:
+        ip = request.META.get("REMOTE_ADDR")
+    return ip

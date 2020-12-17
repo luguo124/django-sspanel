@@ -1,6 +1,6 @@
 from django.urls import path
-from apps.sspanel import views, admin_views
 
+from apps.sspanel import admin_views, views
 
 app_name = "sspanel"
 urlpatterns = [
@@ -56,19 +56,9 @@ urlpatterns = [
         name="admin_node_list",
     ),
     path(
-        "my_admin/node/<str:node_type>/",
-        admin_views.NodeView.as_view(),
-        name="admin_node",
-    ),
-    path(
-        "my_admin/node_delete/<str:node_type>/<int:node_id>/",
+        "my_admin/node_delete/<int:node_id>/",
         admin_views.NodeDeleteView.as_view(),
         name="admin_node_delete",
-    ),
-    path(
-        "my_admin/ss_node/<str:node_type>/<int:node_id>/",
-        admin_views.NodeDetailView.as_view(),
-        name="admin_node_detail",
     ),
     # 用户相关
     path(

@@ -12,18 +12,12 @@ $(function () {
   $(window).resize(footerPosition);
 });
 
-
-
-
 'use strict';
 
 document.addEventListener('DOMContentLoaded', function () {
 
   // Toggles
-
   var $burgers = getAll('.burger');
-  var $fries = getAll('.fries');
-
   if ($burgers.length > 0) {
     $burgers.forEach(function ($el) {
       $el.addEventListener('click', function () {
@@ -36,7 +30,6 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Modals
-
   var $html = document.documentElement;
   var $modals = getAll('.modal');
   var $modalButtons = getAll('.modal-button');
@@ -141,8 +134,6 @@ function genRandomRgbaSet(num) {
 
 }
 
-
-
 var getRandomColor = function () {
   var letters = '0123456789ABCDEF';
   var color = '#';
@@ -160,36 +151,8 @@ var getRandomColorSets = function (num) {
   return colorData
 }
 
-var genDoughnutChart = function (chartId, title, labels, data) {
-  var ctx = $('#' + chartId)
-  var myChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels: labels,
-      datasets: [{
-        data: data,
-        backgroundColor: getRandomColorSets(data.length),
-      }]
-    },
-    options: {
-      title: {
-        display: true,
-        positon: 'top',
-        text: title,
-      },
-      legend: {
-        display: true,
-        position: 'bottom',
-      },
-      tooltip: {
-        enabled: false,
-      },
-      scaleOverlay: true,
-    }
-  });
-}
 
-var genLineChart = function (chartId, config) {
+var genChart = function (chartId, chartType, config) {
   /**
       charId : 元素id 定位canvas用
       config : 配置信息 dict类型
@@ -203,20 +166,41 @@ var genLineChart = function (chartId, config) {
           }
   **/
   var ctx = $('#' + chartId)
-  var myChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: config.labels,
-      datasets: [{
-        label: config.data_title,
-        data: config.data,
-        backgroundColor: getRandomColor(),
-        borderColor: getRandomColor(),
-        steppedLine: false,
-        fill: false,
-      }]
-    },
-    options: {
+  data = {
+    labels: config.labels,
+    datasets: [{
+      label: config.data_title,
+      data: config.data,
+      backgroundColor: getRandomColorSets(config.data.length),
+      borderColor: getRandomColorSets(config.data.length),
+      steppedLine: false,
+      fill: false,
+    }]
+  }
+  if (chartType == 'doughnut') {
+    options = {
+      title: {
+        display: true,
+        positon: 'top',
+        text: config.title,
+      },
+      legend: {
+        display: true,
+        position: 'bottom',
+      },
+      tooltip: {
+        enabled: false,
+      },
+      scaleOverlay: true,
+    }
+    if (config.labels.length > 3) {
+      options.legend.display = false
+    }
+  }
+  if (chartType == 'line') {
+    data.datasets[0].backgroundColor = getRandomColor()
+    data.datasets[0].borderColor = getRandomColor()
+    options = {
       responsive: true,
       title: {
         display: true,
@@ -225,6 +209,9 @@ var genLineChart = function (chartId, config) {
       hover: {
         mode: 'nearest',
         intersect: true
+      },
+      legend: {
+        display: false,
       },
       scales: {
         xAxes: [{
@@ -243,33 +230,29 @@ var genLineChart = function (chartId, config) {
         }]
       }
     }
-  })
-}
-var genBarChart = function (chartId, config) {
-  /**
-      charId : 元素id 定位canvas用
-      config : 配置信息 dict类型
-          {
-              title: 图表名字
-              labels :data对应的label
-              data_title: data的标题
-              data: 数据
-          }
-  **/
-  var ctx = $('#' + chartId)
-  var myChart = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: config.labels,
-      datasets: [{
-        label: config.data_title,
-        data: config.data,
-        backgroundColor: genRandomRgbaSet(config.data.length),
-      }]
-    },
-    options: {
+  }
+  if (chartType == 'bar') {
+    options = {
+      title: {
+        display: true,
+        text: config.title,
+      },
+      legend: {
+        display: false,
+      },
       scales: {
+        xAxes: [{
+          display: true,
+          scaleLabel: {
+            display: true,
+            labelString: config.x_label,
+          }
+        }],
         yAxes: [{
+          scaleLabel: {
+            display: true,
+            labelString: config.y_label,
+          },
           ticks: {
             beginAtZero: true,
             stepSize: 1,
@@ -278,6 +261,6 @@ var genBarChart = function (chartId, config) {
         }]
       }
     }
-  })
+  }
+  new Chart(ctx, { type: chartType, data: data, options: options })
 }
-

@@ -1,6 +1,5 @@
 import os
 
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 LOGIN_URL = "/sspanel/login"
@@ -14,9 +13,9 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_prometheus",
-    "django_crontab",
     "anymail",
     "apps.sspanel",
+    "apps.proxy",
 ]
 
 MIDDLEWARE = [
@@ -28,6 +27,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "apps.mw.ErrorHandlerMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 

@@ -7,7 +7,8 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
 
-from apps.constants import METHOD_CHOICES, THEME_CHOICES
+from apps.constants import THEME_CHOICES
+from apps.proxy.models import ProxyNode, UserOnLineIpLog
 from apps.sspanel.forms import LoginForm, RegisterForm
 from apps.sspanel.models import (
     Announcement,
@@ -19,8 +20,6 @@ from apps.sspanel.models import (
     RebateRecord,
     Ticket,
     User,
-    SSNode,
-    VmessNode,
 )
 from apps.utils import traffic_format
 
@@ -28,26 +27,31 @@ from apps.utils import traffic_format
 class IndexView(View):
     def get(self, request):
         """跳转到首页"""
-        return render(request, "sspanel/index.html")
+        context = {"simple_extra_static": True}
+        return render(request, "sspanel/index.html", context=context)
 
 
 class HelpView(View):
     def get(self, request):
         """跳转到帮助界面"""
-        return render(request, "sspanel/help.html")
+        context = {"simple_extra_static": True}
+        return render(request, "sspanel/help.html", context=context)
 
 
 class RegisterView(View):
     def get(self, request):
+        context = {"simple_extra_static": True}
         if request.user.is_authenticated:
             return HttpResponseRedirect(reverse("sspanel:userinfo"))
         if request.GET.get("ref"):
             form = RegisterForm(initial={"ref": request.GET.get("ref")})
         else:
             form = RegisterForm(initial={"invitecode": request.GET.get("invitecode")})
-        return render(request, "sspanel/register.html", {"form": form})
+        context["form"] = form
+        return render(request, "sspanel/register.html", context=context)
 
     def post(self, request):
+        context = {"simple_extra_static": True}
         if not settings.ALLOW_REGISTER:
             return HttpResponse("已经关闭注册了喵")
 
@@ -65,7 +69,8 @@ class RegisterView(View):
                 )
                 login(request, user)
                 return HttpResponseRedirect(reverse("sspanel:userinfo"))
-        return render(request, "sspanel/register.html", {"form": form})
+        context["form"] = form
+        return render(request, "sspanel/register.html", context=context)
 
 
 class UserLogInView(View):
@@ -83,11 +88,11 @@ class UserLogInView(View):
             else:
                 messages.error(request, "请重新填写信息！", extra_tags="登录失败！")
 
-        context = {"form": LoginForm()}
+        context = {"form": LoginForm(), "simple_extra_static": True}
         return render(request, "sspanel/login.html", context=context)
 
     def get(self, request):
-        context = {"form": LoginForm()}
+        context = {"form": LoginForm(), "simple_extra_static": True}
         return render(request, "sspanel/login.html", context=context)
 
 
@@ -143,7 +148,7 @@ class UserInfoView(LoginRequiredMixin, View):
             "max_traffic": max_traffic,
             "themes": THEME_CHOICES,
             "sub_link": user.sub_link,
-            "methods": [m[0] for m in METHOD_CHOICES],
+            "online_device_count": UserOnLineIpLog.get_user_online_device_count(user),
         }
         return render(request, "sspanel/userinfo.html", context=context)
 
@@ -151,17 +156,11 @@ class UserInfoView(LoginRequiredMixin, View):
 class NodeInfoView(LoginRequiredMixin, View):
     def get(self, request):
         user = request.user
-        # ss node
-        ss_node_list = [
-            node.to_dict_with_extra_info(user) for node in SSNode.get_active_nodes()
-        ]
-        # vmess node
-        vmess_node_list = [
-            node.to_dict_with_extra_info(user) for node in VmessNode.get_active_nodes()
+        node_list = [
+            node.to_dict_with_extra_info(user) for node in ProxyNode.get_active_nodes()
         ]
         context = {
-            "ss_node_list": ss_node_list,
-            "vmess_node_list": vmess_node_list,
+            "node_list": node_list,
             "user": user,
         }
         Announcement.send_first_visit_msg(request)
@@ -170,12 +169,13 @@ class NodeInfoView(LoginRequiredMixin, View):
 
 class UserTrafficLog(LoginRequiredMixin, View):
     def get(self, request):
-        ss_node_list = SSNode.get_active_nodes()
-        vmess_node_list = VmessNode.get_active_nodes()
+        node_list = ProxyNode.get_active_nodes()
         context = {
             "user": request.user,
-            "ss_node_list": ss_node_list,
-            "vmess_node_list": vmess_node_list,
+            "node_list": node_list,
+            "online_device_count": UserOnLineIpLog.get_user_online_device_count(
+                request.user
+            ),
         }
         return render(request, "sspanel/user_traffic_log.html", context=context)
 

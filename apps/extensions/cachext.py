@@ -1,8 +1,10 @@
 import functools
 import pickle
-import redis
 
-DEFAULT_KEY_TYPES = (str, int, float, bool)
+import redis
+from pendulum import DateTime
+
+DEFAULT_KEY_TYPES = (str, int, float, bool, DateTime)
 
 
 def norm_cache_key(v):
@@ -15,7 +17,9 @@ def norm_cache_key(v):
     if v is None or isinstance(v, DEFAULT_KEY_TYPES):
         return str(v)
     else:
-        raise ValueError("only str, int, float, bool, django.WSGIRequest can be key")
+        raise ValueError(
+            "only str, int, float, bool, django.WSGIRequest,DateTime can be key"
+        )
 
 
 def make_default_key(f, *args, **kwargs):
@@ -28,7 +32,7 @@ class cached:
 
     client = None
 
-    def __init__(self, func=None, ttl=60 * 5, cache_key=make_default_key):
+    def __init__(self, func=None, ttl=60 * 60, cache_key=make_default_key):
         self.ttl = ttl
         self.cache_key = cache_key
         if func is not None:
@@ -70,7 +74,7 @@ class cached:
         return wrapper
 
 
-class Redis:
+class RedisClient:
     def __init__(self, uri):
         self._pool = redis.ConnectionPool.from_url(uri)
         self._client = redis.Redis(connection_pool=self._pool)
@@ -105,7 +109,7 @@ class Redis:
 class RedisCache:
     def __init__(self, uri):
         # register cached attr
-        self._client = Redis(uri)
+        self._client = RedisClient(uri)
         self.cached = cached
         self.cached.client = self._client
 

@@ -1,17 +1,9 @@
 METHOD_CHOICES = (
-    ("aes-256-cfb", "aes-256-cfb"),
-    ("aes-128-ctr", "aes-128-ctr"),
-    ("rc4-md5", "rc4-md5"),
-    ("salsa20", "salsa20"),
-    ("chacha20", "chacha20"),
-    ("none", "none"),
     ("chacha20-ietf-poly1305", "chacha20-ietf-poly1305"),
     ("aes-128-gcm", "aes-128-gcm"),
     ("aes-256-gcm", "aes-256-gcm"),
 )
 
-
-AEAD_METHODS = {"chacha20-ietf-poly1305", "aes-128-gcm", "aes-256-gcm"}
 
 COUNTRIES_CHOICES = (
     ("US", "美国"),
@@ -86,3 +78,9 @@ TRANSPORT_TYPES = (
 
 WS_LISTENERS = {LISTEN_WSS, LISTEN_MWSS}
 WS_TRANSPORTS = {TRANSPORT_WSS, TRANSPORT_MWSS}
+
+
+CACHE_TTL_HOUR = 60 * 60
+CACHE_TTL_DAY = CACHE_TTL_HOUR * 24
+CACHE_TTL_WEEK = CACHE_TTL_DAY * 7
+CACHE_TTL_MONTH = CACHE_TTL_DAY * 31

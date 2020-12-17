@@ -13,34 +13,45 @@
         </div>
     </section>
 </div>
-<div class="column is-12">
-    <div class="tile is-ancestor">
-        <div class="tile is-6 is-vertical is-parent">
-            <div class="tile is-child box">
-                <canvas id="userState" width="auto" height="300"></canvas>
-            </div>
-        </div>
-        <div class="tile is-6 is-vertical is-parent">
-            <div class="tile is-child box">
-                <canvas id="nodeState"></canvas>
-            </div>
-            <div class="tile is-child box">
-                <canvas id="donateState"></canvas>
-            </div>
-        </div>
+<div class="columns">
+    <div class="column">
+        <canvas id="id-user-status"></canvas>
+    </div>
+    <div class="column">
+        <canvas id="id-node-status"></canvas>
+    </div>
+    <div class="column">
+        <canvas id="id-amount-status"></canvas>
     </div>
 </div>
+<div class="columns">
+    <div class="column">
+        <canvas id="id-active-user-status"></canvas>
+    </div>
+    <div class="column">
+        <canvas id="id-new-user-status"></canvas>
+    </div>
+</div>
+<div class="columns">
+    <div class="column">
+        <canvas id="id-node-traffic-status"></canvas>
+    </div>
+    <div class="column">
+        <canvas id="id-order-status"></canvas>
+    </div>
+</div>
+
 <script>
     // 获取后台首页状态
     var getSystemStatus = function () {
         $.getJSON("{% url 'api:system_status' %}", function (res) {
-            genDoughnutChart('userState', '总用户:{{ total_user_num }} ',
-                ['在线人数', '今日注册', '今日签到', '从未使用'],
-                res.user_status)
-            genDoughnutChart('nodeState', '节点流量 单位：GB',
-                res.node_status.names, res.node_status.traffics)
-            genDoughnutChart('donateState', '收入分析',
-                ['总成交数', '总收入', '今日成交数', '今日收入'], res.donate_status)
+            genChart('id-user-status', 'doughnut', res.user_status.doughnut_config)
+            genChart('id-node-status', 'doughnut', res.node_status.doughnut_config)
+            genChart('id-amount-status', 'doughnut', res.order_status.doughnut_config)
+            genChart('id-active-user-status', 'line', res.user_status.active_user_line_config)
+            genChart('id-new-user-status', 'line', res.user_status.new_user_line_config)
+            genChart('id-node-traffic-status', 'bar', res.node_status.bar_config)
+            genChart('id-order-status', 'bar', res.order_status.bar_config)
         })
     }
     getSystemStatus()
