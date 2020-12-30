@@ -1,16 +1,36 @@
 # django-sspanel
+
 用diango开发的全新的shadowsocks网络面板
 
-专用后端：[地址：](https://github.com/Ehco1996/shadowsocksr)
+* Telegram group : [invite link](https://t.me/Ehcobreakwa11)
 
-Telegram group : [invite link](https://t.me/Ehcobreakwa11)
+* Wiki: [Wiki](https://github.com/Ehco1996/django-sspanel/wiki)
 
-Wiki: [Wiki](https://github.com/Ehco1996/django-sspanel/wiki)
+## 捐赠
 
+欢迎大家给我捐赠,我的比特币钱包地址: `1Nb98htAPPGE8ihBa5hu5jXs4vXLfsC7Bo`
+
+> 捐赠不会为你带来什么，不捐也不会让你失去什么，但是如果你心情好，完全可以请我喝杯咖啡不是~
+
+## 视频安装教程
+
+* 面板视频安装教程: [地址](https://youtu.be/BRHcdGeufvY)
+
+* 后端对接视频教程: [地址](https://youtu.be/QNbnya1HHU0)
+
+* 隧道对接视频教程: [地址](https://youtu.be/R4U0NZaMUeY)
+
+## 后端地址
+
+* ss: [地址](https://github.com/Ehco1996/aioshadowsocks)
+
+* v2ray: [地址](https://github.com/Ehco1996/v2scar)
+
+* 中转隧道: [地址](https://github.com/Ehco1996/ehco)
 
 ## 项目说明
 
-* 后端支援（shadowsocksr/shadowsocks）
+* 后端支援（shadowsocks/V2ray）
 * 注册采用邀请系统，告别不良用户
 * 统一完善的后台管理界面
 * 完善的商品购买逻辑
@@ -30,7 +50,6 @@ Wiki: [Wiki](https://github.com/Ehco1996/django-sspanel/wiki)
 
 ![](https://user-images.githubusercontent.com/24697284/53059228-12e0dd00-34f1-11e9-8b15-e832c182d010.png)
 
-
 * 节点信息：
 
 ![](https://user-images.githubusercontent.com/24697284/53059231-13797380-34f1-11e9-8702-39c9063dd049.png)
@@ -39,29 +58,23 @@ Wiki: [Wiki](https://github.com/Ehco1996/django-sspanel/wiki)
 
 ![](https://user-images.githubusercontent.com/24697284/53059233-14120a00-34f1-11e9-94f3-b2ca2ab88882.png)
 
-
 **后台界面:**
 
 * 节点管理：
 
 ![](https://user-images.githubusercontent.com/24697284/53059234-14120a00-34f1-11e9-8937-ea56cf4077ed.png)
 
-
-* Django-jet 后台:
-
-![](https://user-images.githubusercontent.com/24697284/53059235-14120a00-34f1-11e9-81ea-69bbb2e445d2.png)
-
-
 ## 部署教程：
 
-部署需要vps的支持  
-我推荐 Vultr 家，最便宜的机房2.5美金一个月  
-支持支付宝支付，对于新手来说，拿来练手最合适不过了  
-这里有一个推广链接 ：https://www.vultr.com/?ref=7914717-4F  
-**通过这个链接注册，你能得到50美元的回赠！,而我能得到25美元的回赠**
+部署需要vps的支持
+我推荐 Vultr 家，最便宜的机房2.5美金一个月
+支持支付宝支付，对于新手来说，拿来练手最合适不过了
+这里有一个推广链接 ：https://www.vultr.com/?ref=7914717-4F
 
-硬核版: [部署教程](https://github.com/Ehco1996/django-sspanel/wiki/%E9%9D%A2%E6%9D%BF%E9%83%A8%E7%BD%B2)
+**通过这个链接注册，你能得到50美元的回赠！, 而我能得到25美元的回赠**
 
-萌新版: [部署教程](https://github.com/Ehco1996/django-sspanel/wiki/%E9%9D%A2%E6%9D%BF%E5%AE%89%E8%A3%85%E6%95%99%E7%A8%8B-%E8%90%8C%E6%96%B0%E7%89%88)
+Docker版: [部署教程](https://github.com/Ehco1996/django-sspanel/wiki/docker%E9%83%A8%E7%BD%B2)
 
-Docker版: [部署教程](https://github.com/Ehco1996/django-sspanel/wiki/Docker-%E4%B8%80%E9%94%AE%E5%AE%89%E8%A3%85)
+## Stargazers over time
+
+[![Stargazers over time](https://starchart.cc/Ehco1996/django-sspanel.svg)](https://starchart.cc/Ehco1996/django-sspanel)

@@ -2,14 +2,15 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm
 from django.forms import ModelForm
 
-from apps.encoder import encoder
+from apps.constants import AEAD_METHODS
 from apps.sspanel.models import (
     Announcement,
     Goods,
     InviteCode,
-    User,
     SSNode,
-    UserSSConfig,
+    TrojanNode,
+    User,
+    VmessNode,
 )
 
 
@@ -52,6 +53,9 @@ class RegisterForm(UserCreationForm):
         super().__init__(*args, **kw)
         if "ref" in self.data or "ref" in self.initial.keys():
             self.fields.pop("invitecode")
+            self.fields["ref"].label = "not show"
+            self.fields["ref"].help_text = None
+            self.fields["ref"].widget = forms.HiddenInput()
         else:
             self.fields.pop("ref")
 
@@ -85,7 +89,7 @@ class RegisterForm(UserCreationForm):
     def _clean_ref(self):
         ref = self.cleaned_data.get("ref")
         try:
-            user_id = encoder.string2int(ref)
+            user_id = int(ref)
         except ValueError:
             raise forms.ValidationError("ref不正确")
 
@@ -102,7 +106,7 @@ class RegisterForm(UserCreationForm):
 class LoginForm(forms.Form):
     username = forms.CharField(
         required=True,
-        label=u"用户名",
+        label="用户名",
         error_messages={"required": "请输入用户名"},
         widget=forms.TextInput(
             attrs={"class": "input is-primary", "placeholder": "用户名"}
@@ -110,8 +114,8 @@ class LoginForm(forms.Form):
     )
     password = forms.CharField(
         required=True,
-        label=u"密码",
-        error_messages={"required": u"请输入密码"},
+        label="密码",
+        error_messages={"required": "请输入密码"},
         widget=forms.PasswordInput(
             attrs={"class": "input is-primary", "placeholder": "密码", "type": "password"}
         ),
@@ -119,7 +123,7 @@ class LoginForm(forms.Form):
 
     def clean(self):
         if not self.is_valid():
-            raise forms.ValidationError(u"用户名和密码为必填项")
+            raise forms.ValidationError("用户名和密码为必填项")
         else:
             self.cleaned_data = super(LoginForm, self).clean()
 
@@ -131,7 +135,9 @@ class SSNodeForm(ModelForm):
         widgets = {
             "node_id": forms.NumberInput(attrs={"class": "input"}),
             "level": forms.NumberInput(attrs={"class": "input"}),
+            "enlarge_scale": forms.NumberInput(attrs={"class": "input"}),
             "name": forms.TextInput(attrs={"class": "input"}),
+            "port": forms.TextInput(attrs={"class": "input"}),
             "info": forms.TextInput(attrs={"class": "input"}),
             "server": forms.TextInput(attrs={"class": "input"}),
             "method": forms.Select(attrs={"class": "input"}),
@@ -140,6 +146,94 @@ class SSNodeForm(ModelForm):
             "total_traffic": forms.NumberInput(attrs={"class": "input"}),
             "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
             "custom_method": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "speed_limit": forms.NumberInput(attrs={"class": "input"}),
+            "ehco_listen_host": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_port": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_type": forms.Select(attrs={"class": "input"}),
+            "ehco_transport_type": forms.Select(attrs={"class": "input"}),
+            "enable_ehco_lb": forms.CheckboxInput(attrs={"class": "checkbox"}),
+        }
+
+    def _clean_one_port_many_user(self):
+        if (
+            self.cleaned_data.get("port")
+            and self.cleaned_data.get("method") not in AEAD_METHODS
+        ):
+            raise forms.ValidationError("当前加密方式不支持单端口多用户")
+
+    def clean_port(self):
+        self._clean_one_port_many_user()
+        return self.cleaned_data.get("port")
+
+    def clean_method(self):
+        self._clean_one_port_many_user()
+        return self.cleaned_data.get("method")
+
+
+class VmessNodeForm(ModelForm):
+    class Meta:
+        model = VmessNode
+        fields = "__all__"
+        widgets = {
+            "node_id": forms.NumberInput(attrs={"class": "input"}),
+            "level": forms.NumberInput(attrs={"class": "input"}),
+            "enlarge_scale": forms.NumberInput(attrs={"class": "input"}),
+            "name": forms.TextInput(attrs={"class": "input"}),
+            "inbound_tag": forms.TextInput(attrs={"class": "input"}),
+            "alter_id": forms.NumberInput(attrs={"class": "input"}),
+            "service_port": forms.NumberInput(attrs={"class": "input"}),
+            "client_port": forms.NumberInput(attrs={"class": "input"}),
+            "info": forms.TextInput(attrs={"class": "input"}),
+            "server": forms.TextInput(attrs={"class": "input"}),
+            "listen_host": forms.TextInput(attrs={"class": "input"}),
+            "grpc_host": forms.TextInput(attrs={"class": "input"}),
+            "grpc_port": forms.TextInput(attrs={"class": "input"}),
+            "country": forms.Select(attrs={"class": "input"}),
+            "used_traffic": forms.NumberInput(attrs={"class": "input"}),
+            "total_traffic": forms.NumberInput(attrs={"class": "input"}),
+            "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "ws_host": forms.TextInput(attrs={"class": "input"}),
+            "ws_path": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_host": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_port": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_type": forms.Select(attrs={"class": "input"}),
+            "ehco_transport_type": forms.Select(attrs={"class": "input"}),
+            "enable_ehco_lb": forms.CheckboxInput(attrs={"class": "checkbox"}),
+        }
+
+
+class TrojanNodeForm(ModelForm):
+    class Meta:
+        model = TrojanNode
+        fields = "__all__"
+        widgets = {
+            "node_id": forms.NumberInput(attrs={"class": "input"}),
+            "level": forms.NumberInput(attrs={"class": "input"}),
+            "enlarge_scale": forms.NumberInput(attrs={"class": "input"}),
+            "name": forms.TextInput(attrs={"class": "input"}),
+            "inbound_tag": forms.TextInput(attrs={"class": "input"}),
+            "service_port": forms.NumberInput(attrs={"class": "input"}),
+            "client_port": forms.NumberInput(attrs={"class": "input"}),
+            "info": forms.TextInput(attrs={"class": "input"}),
+            "server": forms.TextInput(attrs={"class": "input"}),
+            "listen_host": forms.TextInput(attrs={"class": "input"}),
+            "grpc_host": forms.TextInput(attrs={"class": "input"}),
+            "grpc_port": forms.TextInput(attrs={"class": "input"}),
+            "country": forms.Select(attrs={"class": "input"}),
+            "used_traffic": forms.NumberInput(attrs={"class": "input"}),
+            "total_traffic": forms.NumberInput(attrs={"class": "input"}),
+            "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "ehco_listen_host": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_port": forms.TextInput(attrs={"class": "input"}),
+            "ehco_listen_type": forms.Select(attrs={"class": "input"}),
+            "ehco_transport_type": forms.Select(attrs={"class": "input"}),
+            "network": forms.TextInput(attrs={"class": "input"}),
+            "alpn": forms.TextInput(attrs={"class": "input"}),
+            "certificate_file": forms.TextInput(attrs={"class": "input"}),
+            "key_file": forms.TextInput(attrs={"class": "input"}),
+            "enable_ehco_lb": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "security": forms.TextInput(attrs={"class": "input"}),
+            "skip_cert_verify": forms.CheckboxInput(attrs={"class": "checkbox"}),
         }
 
 
@@ -158,22 +252,19 @@ class AnnoForm(ModelForm):
 class UserForm(ModelForm):
     class Meta:
         model = User
-        fields = ["balance", "level", "level_expire_time"]
+        fields = [
+            "balance",
+            "level",
+            "level_expire_time",
+            "ss_port",
+            "ss_password",
+            "ss_method",
+        ]
         widgets = {
             "balance": forms.NumberInput(attrs={"class": "input"}),
             "level": forms.NumberInput(attrs={"class": "input"}),
             "level_expire_time": forms.DateTimeInput(attrs={"class": "input"}),
-        }
-
-
-class UserSSConfigForm(ModelForm):
-    class Meta:
-        model = UserSSConfig
-        fields = ["port", "password", "speed_limit", "method", "enable"]
-        widgets = {
-            "port": forms.NumberInput(attrs={"class": "input"}),
-            "speed_limit": forms.NumberInput(attrs={"class": "input"}),
-            "password": forms.TextInput(attrs={"class": "input"}),
-            "method": forms.Select(attrs={"class": "input"}),
-            "enable": forms.CheckboxInput(attrs={"class": "checkbox"}),
+            "ss_port": forms.NumberInput(attrs={"class": "input"}),
+            "ss_password": forms.TextInput(attrs={"class": "input"}),
+            "ss_method": forms.Select(attrs={"class": "input"}),
         }

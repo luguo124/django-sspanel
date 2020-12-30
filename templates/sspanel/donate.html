@@ -1,4 +1,4 @@
-{% extends 'base.html' %} {% block main %} {% load static %} {% load ehcofilter %}
+{% extends 'base.html' %} {% load ehcofilter %} {% block main %} {% load static %} {% load ehcofilter %}
 <div class="column is-12">
     <section class="hero is-primary is-smaill">
         <div class="hero-body">
@@ -7,7 +7,7 @@
                     捐赠榜：
                 </h1>
                 <h2 class="subtitle">
-                    有你们的支持,才让这里继续下去 谢谢！
+                    捐赠的金额会自动同步到账户余额里去~
                 </h2>
             </div>
         </div>
@@ -16,10 +16,10 @@
 <div class="column is-12">
     <div class="tile is-ancestor">
         <div class="tile is-5 is-vertical is-parent">
-            {% if alipay == True %}
+            {% settings_value "USE_ALIPAY" as use_alipay %}
+            {% if use_alipay %}
             <div class="tile box is-child">
-                <p class="subtitle">充值捐赠系统正在内测中...
-                    <br>请在下方输入
+                <p class="subtitle">请在下方输入
                     <strong>充值/捐赠金额</strong>
                 </p>
                 <p>点击提交会弹出
@@ -29,7 +29,7 @@
                 <strong>付完款之后要按红色的确认按钮！</strong>
                 <hr>
                 <div class="content">
-                    <div class="field is-grouped">
+                    <div class="field is-grouped is-grouped-multiline">
                         <div class="control has-icons-left">
                             <div class="control">
                                 <input id="id-input-payinput" class="input" type="number" step="1"
@@ -71,7 +71,6 @@
         <div class="tile is-7 is-vertical is-parent">
             <div class="tile box is-child">
                 <div class="content">
-                    <p class="subtitle">在充值界面充值也等同于捐赠，记录会自动同步</p>
                     <table class="table is-striped">
                         <thead>
                             <tr>
@@ -84,7 +83,7 @@
                         <tr>
                             <td>{{ donate.user|mix_name:donate.user }}</td>
                             <td>{{ donate.money }} 元</td>
-                            <td>{{ donate.time|date:"m月d日" }}：</td>
+                            <td>{{ donate.time|date:"m月d日" }}</td>
                         </tr>
                         {% empty %}
                         <p class="subtitle">
@@ -111,6 +110,7 @@
                 num: paynum,
                 csrfmiddlewaretoken: '{{ csrf_token }}',
             }
+            requestButton.attr("disabled", "disabled")
             $.post(url, data, function (results) {
                 codeBox.attr('class', '')
                 // 追加二维码图片
@@ -118,7 +118,6 @@
                 qrcode_url = results.qrcode_url
                 $("#id-qrcode-canvas").qrcode(qrcode_url)
                 swal(info.title, info.subtitle, info.status)
-                requestButton.attr("disabled", "disabled")
             })
         } else {
             swal('错误！', '金额必须为整数且最少为一元', 'error')

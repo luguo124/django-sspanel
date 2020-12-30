@@ -1,0 +1,76 @@
+# HTTP 端口
+port: 7890
+# SOCKS5 端口
+socks-port: 7891
+# Linux 及 macOS 的 redir 端口
+redir-port: 7892
+allow-lan: true
+# Rule / Global/ Direct (默认为 Rule 模式)
+mode: Rule
+log-level: info
+# RESTful API for clash
+external-controller: 0.0.0.0:9090
+experimental:
+  ignore-resolve-fail: true # ignore dns resolve fail, default value is true
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  nameserver:
+    - 114.114.114.114 # default value
+    - 8.8.8.8 # default value
+    - tls://dns.rubyfish.cn:853 # DNS over TLS
+    - https://1.1.1.1/dns-query # DNS over HTTPS
+  fallback:
+    - tls://13800000000.rubyfish.cn:853
+    - tls://1.0.0.1:853
+    - tls://dns.google:853
+# 代理节点
+proxies:
+{% autoescape off %}
+{% for node in nodes %} - {{ node.clash_link }}
+{% endfor %}
+{% endautoescape%}
+
+# 代理策略组
+proxy-groups:
+  # select 用来允许用户手动选择 代理服务器 或 服务器组
+  # 您也可以使用 RESTful API 去切换服务器，这种方式推荐在 GUI 中使用
+  - name: PROXY
+    type: select
+    proxies:
+     - auto
+    {% for node in nodes %} - {{ node.name }}
+    {% endfor %}
+
+  # url-test 可以自动选择与指定 URL 测速后，延迟最短的服务器
+  - name: auto
+    type: url-test
+    proxies:
+    {% for node in nodes %} - {{ node.name }}
+    {% endfor %}
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
+
+  # fallback 可以尽量按照用户书写的服务器顺序，在确保服务器可用的情况下，自动选择服务器
+  - name: fallback-auto
+    type: fallback
+    proxies:
+    {% for node in nodes %} - {{ node.name }}
+    {% endfor %}
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
+
+  # load-balance 可以使相同 eTLD 请求在同一条代理线路上
+  - name: load-balance
+    type: load-balance
+    proxies:
+    {% for node in nodes %} - {{ node.name }}
+    {% endfor %}
+    url: "http://www.gstatic.com/generate_204"
+    interval: 300
+
+{% if sub_type == "clash" %}
+{% include "yamls/rules.yml" %}
+{% else %}
+{% include "yamls/rule_sets.yml" %}
+{% endif %}
