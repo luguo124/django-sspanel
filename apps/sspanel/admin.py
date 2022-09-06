@@ -5,9 +5,18 @@ from . import models
 
 
 class UserAdmin(admin.ModelAdmin):
-    list_display = ["username", "id", "level", "balance", "used_percentage", "sub_link"]
+    list_display = [
+        "username",
+        "id",
+        "level",
+        "balance",
+        "used_percentage",
+        "date_joined",
+        "sub_link",
+    ]
     search_fields = ["username", "email", "id"]
     list_filter = ["level"]
+    list_per_page = 31
 
 
 class UserOrderAdmin(admin.ModelAdmin):
@@ -17,8 +26,22 @@ class UserOrderAdmin(admin.ModelAdmin):
         "out_trade_no",
         "amount",
         "created_at",
-        "expired_at",
+        "user_date_joined",
+        "inviter",
     ]
+    list_per_page = 31
+
+    def user_date_joined(self, obj):
+        return obj.user.date_joined
+
+    def inviter(self, obj):
+        if obj.user.inviter_id:
+            return models.User.get_by_id_with_cache(obj.user.inviter_id)
+        return "无邀请人"
+
+    user_date_joined.short_description = "用户注册时间"
+    inviter.short_description = "邀请人"
+
     search_fields = ["user__username", "user__id"]
     list_filter = ["amount", "status", "created_at"]
     ordering = ("-created_at",)
@@ -57,7 +80,7 @@ class DonateAdmin(admin.ModelAdmin):
 
 
 class GoodsAdmin(admin.ModelAdmin):
-    list_display = ["name", "transfer", "money", "level"]
+    list_display = ["name", "transfer", "money", "status_cn", "level"]
 
 
 class EmailSendLogAdmin(admin.ModelAdmin):
@@ -77,12 +100,6 @@ class TicketAdmin(admin.ModelAdmin):
     search_fields = ["title", "user__id"]
 
 
-class UserSubLogAdmin(admin.ModelAdmin):
-    list_display = ["user", "sub_type", "ip", "created_at"]
-    list_filter = ["user", "sub_type"]
-    list_select_related = ["user"]
-
-
 # Register your models here.
 admin.site.register(models.User, UserAdmin)
 admin.site.register(models.UserOrder, UserOrderAdmin)
@@ -97,7 +114,6 @@ admin.site.register(models.Announcement)
 admin.site.register(models.Ticket, TicketAdmin)
 admin.site.register(models.EmailSendLog, EmailSendLogAdmin)
 admin.site.register(models.RebateRecord, RebateRecordAdmin)
-admin.site.register(models.UserSubLog, UserSubLogAdmin)
 
 
 admin.site.unregister(Group)

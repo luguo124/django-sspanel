@@ -16,11 +16,12 @@ urlpatterns = [
     path("logout/", views.UserLogOutView.as_view(), name="logout"),
     # 节点
     path("nodeinfo/", views.NodeInfoView.as_view(), name="nodeinfo"),
-    path("user_traffic_log/", views.UserTrafficLog.as_view(), name="user_traffic_log"),
+    path(
+        "user_traffic_log/", views.UserTrafficLogView.as_view(), name="user_traffic_log"
+    ),
     # 用户信息
     path("users/userinfo/", views.UserInfoView.as_view(), name="userinfo"),
     # 捐赠/充值
-    path("donate/", views.DonateView.as_view(), name="donate"),
     path("shop/", views.ShopView.as_view(), name="shop"),
     path("purchaselog/", views.PurchaseLogView.as_view(), name="purchaselog"),
     path("chargecenter/", views.ChargeView.as_view(), name="chargecenter"),
@@ -41,11 +42,6 @@ urlpatterns = [
     # ====================================================================
     # 网站后台界面
     # ====================================================================
-    path(
-        "my_admin/user_online_ip_log/",
-        admin_views.UserOnlineIpLogView.as_view(),
-        name="user_online_ip_log",
-    ),
     path("my_admin/", admin_views.SystemStatusView.as_view(), name="system_status"),
     # 邀请码相关
     path("my_admin/invite/", admin_views.InviteCodeView.as_view(), name="admin_invite"),
@@ -61,26 +57,6 @@ urlpatterns = [
         name="admin_node_delete",
     ),
     # 用户相关
-    path(
-        "my_admin/user_list/",
-        admin_views.UserListView.as_view(),
-        name="admin_user_list",
-    ),
-    path(
-        "my_admin/user/delete/<int:pk>/",
-        admin_views.UserDeleteView.as_view(),
-        name="admin_user_delete",
-    ),
-    path(
-        "my_admin/user/search/",
-        admin_views.UserSearchView.as_view(),
-        name="admin_user_search",
-    ),
-    path(
-        "my_admin/user/<int:pk>/",
-        admin_views.UserDetailView.as_view(),
-        name="admin_user_detail",
-    ),
     path(
         "my_admin/user_status/",
         admin_views.UserStatusView.as_view(),

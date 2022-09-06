@@ -5,6 +5,8 @@
 <head>
     {% load static %}
     <title>{% settings_value "TITLE" %}</title>
+    <meta name="keywords" content="{% settings_value "KEYWORDS" %}" />
+    <meta name="description" content="{% settings_value "DESCRIPTION" %}" />
     {% include "basehead.html" %}
 </head>
 
@@ -62,9 +64,8 @@
                     <a class="navbar-item" href="{% url 'sspanel:nodeinfo' %}">节点信息</a>
                     <a class="navbar-item" href="{% url 'sspanel:user_traffic_log' %}">流量记录</a>
                     <a class="navbar-item is-active">交易相关</a>
-                    <a class="navbar-item" href="{% url 'sspanel:donate' %}">捐赠付费</a>
-                    <a class="navbar-item" href="{% url 'sspanel:chargecenter' %}">充值界面</a>
-                    <a class="navbar-item" href="{% url 'sspanel:shop' %}">商品界面</a>
+                    <a class="navbar-item" href="{% url 'sspanel:chargecenter' %}">捐赠充值</a>
+                    <a class="navbar-item" href="{% url 'sspanel:shop' %}">商品中心</a>
                     <a class="navbar-item" href="{% url 'sspanel:purchaselog' %}">购买记录</a>
                     <a class="navbar-item is-active">邀请相关</a>
                     <a class="navbar-item" href="{% url 'sspanel:aff_invite' %}">邀请返利</a>
@@ -97,7 +98,7 @@
                     {% if user.is_authenticated %}
                     <aside class="menu">
                         <p class="menu-label">
-                            我的信息：
+                            我的信息
                         </p>
                         <ul class="menu-list">
                             <li>
@@ -126,13 +127,10 @@
                         </p>
                         <ul class="menu-list">
                             <li>
-                                <a href="{% url 'sspanel:donate' %}">捐赠付费</a>
+                                <a href="{% url 'sspanel:chargecenter' %}">捐赠充值</a>
                             </li>
                             <li>
-                                <a href="{% url 'sspanel:chargecenter' %}">充值界面</a>
-                            </li>
-                            <li>
-                                <a href="{% url 'sspanel:shop' %}">商品界面</a>
+                                <a href="{% url 'sspanel:shop' %}">商品中心</a>
                             </li>
                             <li>
                                 <a href="{% url 'sspanel:purchaselog' %}">购买记录</a>
@@ -166,29 +164,29 @@
                         {% endif %} {% else %}
                         <article class="message is-primary">
                             <div class="message-header">
-                                <p>幻想乡：</p>
+                                <p>幻想乡</p>
                                 <button class="delete"></button>
                             </div>
                             <div class="message-body">
-                                幻想中的:「地方」
+                                幻想中的「地方」
                             </div>
                         </article>
                         <article class="message is-info">
                             <div class="message-header">
-                                <p>谜の屋：</p>
+                                <p>谜の屋</p>
                                 <button class="delete"></button>
                             </div>
                             <div class="message-body">
-                                他不存于:「地表」
+                                他不存于「地表」
                             </div>
                         </article>
                         <article class="message is-success">
                             <div class="message-header">
-                                <p>时之塔：</p>
+                                <p>时之塔</p>
                                 <button class="delete"></button>
                             </div>
                             <div class="message-body">
-                                这囚禁着：「思想」
+                                这囚禁着「思想」
                             </div>
                         </article>
                         <article class="message is-warning">
@@ -197,7 +195,7 @@
                                 <button class="delete"></button>
                             </div>
                             <div class="message-body">
-                                却连接着：「自由」
+                                却连接着「自由」
                             </div>
                         </article>
                         {% endif %}
@@ -210,25 +208,6 @@
             </div>
         </div>
     </div>
-    <footer>
-        <div class="container">
-            <div class="content has-text-centered">
-                <p>
-                    <p class="copyright">&copy; 2020·
-                        <a href="https://github.com/Ehco1996">GitHub</a>
-                    </p>
-                </p>
-            </div>
-        </div>
-    </footer>
 </body>
-<!--整站消息提醒功能 TODO 这里写成函数-->
-{% if messages %}
-<script>
-    {% for message in messages %}
-    swal("{{ message.extra_tags }}", '{{ message }}', '{{ message.level_tag }}');
-    {% endfor %}
-</script>
-{% endif %}
-
+{% include "footer.html" %}
 </html>

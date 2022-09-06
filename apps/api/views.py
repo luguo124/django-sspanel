@@ -1,12 +1,13 @@
 import pendulum
+from django.conf import settings
 from django.contrib.auth.decorators import login_required, permission_required
-from django.http import HttpResponse, HttpResponseNotFound, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from apps.ext import encoder, lock
+from apps.ext import lock
 from apps.proxy import models as m
 from apps.sspanel import tasks
 from apps.sspanel.models import Goods, InviteCode, User, UserCheckInLog, UserOrder
@@ -14,7 +15,8 @@ from apps.sub import UserSubManager
 from apps.tianyi import DashBoardManger
 from apps.utils import (
     api_authorized,
-    gen_date_list,
+    gen_datetime_list,
+    get_client_ip,
     get_current_datetime,
     handle_json_post,
     traffic_format,
@@ -24,10 +26,14 @@ from apps.utils import (
 class SystemStatusView(View):
     @method_decorator(permission_required("sspanel"))
     def get(self, request):
+        start = pendulum.parse(request.GET["start"])
+        end = pendulum.parse(request.GET["end"])
+        dt_list = [start.add(days=i) for i in range((end - start).days + 1)]
+        dm = DashBoardManger(dt_list)
         data = {
-            "user_status": DashBoardManger.get_user_last_week_status_data(),
-            "node_status": DashBoardManger.get_node_status(),
-            "order_status": DashBoardManger.get_userorder_last_week_status_data(),
+            "node_status": dm.get_node_status(),
+            "user_status": dm.get_user_status_data(),
+            "order_status": dm.get_userorder_status_data(),
         }
         return JsonResponse(data)
 
@@ -51,16 +57,46 @@ class UserSettingsView(View):
 
 class SubscribeView(View):
     def get(self, request):
-        token = request.GET.get("token")
-        if not token:
-            return HttpResponseNotFound()
-        user = User.get_or_none(encoder.string2int(token))
+        user = None
+        uid = request.GET.get("uid")
+        if uid:
+            user = User.objects.filter(uid=uid).first()
         if not user:
-            return HttpResponseNotFound()
+            return HttpResponseBadRequest("user not found")
+        node_list = m.ProxyNode.get_active_nodes(level=user.level)
+        if len(node_list) == 0:
+            return HttpResponseBadRequest("no active nodes for you")
 
-        sub_type = request.GET.get("sub_type")
-        sub_links = UserSubManager(user, sub_type, request).get_sub_links()
-        return HttpResponse(sub_links)
+        sub_info = UserSubManager(
+            user, request.GET.get("sub_type"), node_list
+        ).get_sub_info()
+        return HttpResponse(
+            sub_info,
+            content_type="text/plain; charset=utf-8",
+            headers=user.get_subinfo_header(),
+        )
+
+
+class ClashProxyProviderView(View):
+    def get(self, request):
+        user = None
+        uid = request.GET.get("uid")
+        if uid:
+            user = User.objects.filter(uid=uid).first()
+        if not user:
+            return HttpResponseBadRequest("user not found")
+        node_list = m.ProxyNode.get_active_nodes(level=user.level)
+        if len(node_list) == 0:
+            return HttpResponseBadRequest("no active nodes for you")
+
+        providers = UserSubManager(
+            user, request.GET.get("sub_type"), node_list
+        ).get_clash_proxy_providers()
+
+        return HttpResponse(
+            providers,
+            content_type="text/plain; charset=utf-8",
+        )
 
 
 class UserRefChartView(View):
@@ -68,9 +104,8 @@ class UserRefChartView(View):
     def get(self, request):
         date = request.GET.get("date")
         t = pendulum.parse(date) if date else get_current_datetime()
-        date_list = gen_date_list(t)
         bar_configs = DashBoardManger.gen_ref_log_bar_chart_configs(
-            request.user.id, date_list
+            request.user.id, [dt.date() for dt in gen_datetime_list(t)]
         )
         return JsonResponse(bar_configs)
 
@@ -80,9 +115,8 @@ class UserTrafficChartView(View):
     def get(self, request):
         node_id = request.GET.get("node_id", 0)
         user_id = request.user.pk
-        last_week = gen_date_list(get_current_datetime())
         configs = DashBoardManger.gen_traffic_line_chart_configs(
-            user_id, node_id, last_week
+            user_id, node_id, gen_datetime_list(get_current_datetime())
         )
         return JsonResponse(configs)
 
@@ -96,7 +130,7 @@ class ProxyConfigsView(View):
     def get(self, request, node_id):
         node = m.ProxyNode.get_or_none(node_id)
         if not node:
-            return HttpResponseNotFound()
+            return HttpResponseBadRequest()
         return JsonResponse(node.get_proxy_configs())
 
     @method_decorator(handle_json_post)
@@ -104,7 +138,7 @@ class ProxyConfigsView(View):
     def post(self, request, node_id):
         node = m.ProxyNode.get_or_none(node_id)
         if not node:
-            return HttpResponseNotFound()
+            return HttpResponseBadRequest()
         tasks.sync_user_traffic_task.delay(node_id, request.json["data"])
         return JsonResponse(data={})
 
@@ -114,21 +148,10 @@ class EhcoRelayConfigView(View):
 
     @method_decorator(api_authorized)
     def get(self, request, node_id):
-        node = m.RelayNode.get_or_none(node_id)
+        node: m.RelayNode = m.RelayNode.get_or_none(node_id)
         if not node:
-            return HttpResponseNotFound()
+            return HttpResponseBadRequest()
         return JsonResponse(node.get_relay_rules_configs())
-
-
-class EhcoServerConfigView(View):
-    """落地机器"""
-
-    @method_decorator(api_authorized)
-    def get(self, request, node_id):
-        node = m.ProxyNode.get_or_none(node_id)
-        if not node:
-            return HttpResponseNotFound()
-        return JsonResponse(node.get_ehco_server_config())
 
 
 class UserCheckInView(View):
@@ -148,18 +171,6 @@ class UserCheckInView(View):
         return JsonResponse(data)
 
 
-class ReSetSSPortView(View):
-    @method_decorator(login_required)
-    def post(self, request):
-        port = request.user.reset_random_port()
-        data = {
-            "title": "修改成功！",
-            "subtitle": "端口修改为：{}！".format(port),
-            "status": "success",
-        }
-        return JsonResponse(data)
-
-
 class OrderView(View):
     @method_decorator(login_required)
     def get(self, request):
@@ -175,12 +186,27 @@ class OrderView(View):
     def post(self, request):
         try:
             amount = int(request.POST.get("num"))
-            if amount < 1 or amount > 99999:
+            if amount < 1:
                 raise ValueError
         except ValueError:
             return JsonResponse(
-                {"info": {"title": "失败", "subtitle": "请保证金额正确", "status": "error"}},
+                {"info": {"title": "校验失败", "subtitle": "请保证金额正确", "status": "error"}},
             )
+
+        if settings.CHECK_PAY_REQ_IP_FROM_CN:
+            from ipicn import is_in_china
+
+            if not is_in_china(get_client_ip(request)):
+                return JsonResponse(
+                    {
+                        "info": {
+                            "title": "校验失败",
+                            "subtitle": "支付时请不要使用代理软件",
+                            "status": "error",
+                        }
+                    }
+                )
+
         order = UserOrder.get_or_create_order(request.user, amount)
         info = {
             "title": "请求成功！",
@@ -217,7 +243,7 @@ def purchase(request):
     good = Goods.objects.get(id=good_id)
     if not good.purchase_by_user(request.user):
         return JsonResponse(
-            {"title": "金额不足！", "status": "error", "subtitle": "请去捐赠界面/联系站长充值"}
+            {"title": "余额不足", "status": "error", "subtitle": "先去捐赠充值那捐赠"}
         )
     else:
         return JsonResponse(

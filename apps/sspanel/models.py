@@ -3,6 +3,7 @@ import random
 import re
 import time
 from decimal import Decimal
+from socket import timeout
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -12,14 +13,12 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import functional, timezone
 from redis.exceptions import LockError
 
 from apps import constants as c
-from apps import utils
 from apps.ext import cache, encoder, lock, pay
 from apps.utils import (
     get_current_datetime,
@@ -58,18 +57,17 @@ class User(AbstractUser):
     )
     inviter_id = models.PositiveIntegerField(verbose_name="邀请人id", default=1)
 
-    # ss 相关
+    # ss 相关 TODO delete ss prefix
     ss_port = models.IntegerField("端口", unique=True, default=MIN_PORT)
     ss_password = models.CharField(
         "密码", max_length=32, default=get_short_random_string, unique=True
     )
-    # v2ray相关
-    vmess_uuid = models.CharField(verbose_name="Vmess uuid", max_length=64, default="")
     # 流量相关
     upload_traffic = models.BigIntegerField("上传流量", default=0)
     download_traffic = models.BigIntegerField("下载流量", default=0)
     total_traffic = models.BigIntegerField("总流量", default=settings.DEFAULT_TRAFFIC)
     last_use_time = models.DateTimeField("上次使用时间", blank=True, db_index=True, null=True)
+    uid = models.UUIDField("uid", null=True, unique=True)  # NOTE 不要用用这个 uid 当主键，是有可能会变的
 
     class Meta(AbstractUser.Meta):
         verbose_name = "用户"
@@ -114,7 +112,7 @@ class User(AbstractUser):
             UserRefLog.log_ref(inviter_id, pendulum.today())
             user.inviter_id = inviter_id
         # 绑定uuid
-        user.vmess_uuid = str(uuid4())
+        user.uid = str(uuid4())
         user.save()
         return user
 
@@ -141,8 +139,11 @@ class User(AbstractUser):
             user.save()
             print(f"Time: {now} user: {user} level timeout!")
         if expired_users and settings.EXPIRE_EMAIL_NOTICE:
-            EmailSendLog.send_mail_to_users(
-                expired_users,
+            from apps.sspanel.tasks import send_mail_to_users_task
+
+            user_id_list = [user.id for user in expired_users]
+            send_mail_to_users_task.delay(
+                user_id_list,
                 f"您的{settings.TITLE}账号已到期",
                 f"您的账号现被暂停使用。如需继续使用请前往 {settings.HOST} 充值",
             )
@@ -164,8 +165,11 @@ class User(AbstractUser):
             print(f"user: {user} traffic overflow!")
 
         if out_of_traffic_users and settings.EXPIRE_EMAIL_NOTICE:
-            EmailSendLog.send_mail_to_users(
-                out_of_traffic_users,
+            from apps.sspanel.tasks import send_mail_to_users_task
+
+            user_id_list = [user.id for user in out_of_traffic_users]
+            send_mail_to_users_task.delay(
+                user_id_list,
                 f"您的{settings.TITLE}账号流量已全部用完",
                 f"您的账号现被暂停使用。如需继续使用请前往 {settings.HOST} 充值",
             )
@@ -192,7 +196,7 @@ class User(AbstractUser):
         return cls.objects.all().order_by("-download_traffic")[:count]
 
     @classmethod
-    def get_new_user_count_by_date(cls, date):
+    def get_new_user_count_by_datetime(cls, date: pendulum.DateTime):
         return cls.objects.filter(
             date_joined__range=[
                 date.start_of("day"),
@@ -203,7 +207,7 @@ class User(AbstractUser):
     @property
     def sub_link(self):
         """订阅地址"""
-        params = {"token": self.token}
+        params = {"uid": self.uid}
         return settings.HOST + f"/api/subscribe/?{urlencode(params)}"
 
     @property
@@ -251,11 +255,18 @@ class User(AbstractUser):
     def remain_percentage(self):
         return 100.00 - self.used_percentage
 
+    @property
+    def clash_proxy_provider_endpoint(self):
+        params = {"uid": self.uid}
+        return (
+            settings.HOST + f"/api/subscribe/clash/proxy_providers/?{urlencode(params)}"
+        )
+
     @transaction.atomic
     def reset_random_port(self):
         cls = type(self)
         port = cls.get_not_used_port()
-        self.port = port
+        self.ss_port = port
         self.save()
         return port
 
@@ -265,10 +276,9 @@ class User(AbstractUser):
             if k in clean_fields:
                 setattr(self, k, v)
         try:
-            self.full_clean()
             self.save()
             return True
-        except ValidationError:
+        except ValidationError as e:
             return False
 
     def reset_traffic(self, new_traffic):
@@ -280,6 +290,15 @@ class User(AbstractUser):
         self.enable = False
         self.reset_traffic(settings.DEFAULT_TRAFFIC)
         self.save()
+
+    def get_subinfo_header(self):
+        """
+        https://github.com/crossutility/Quantumult/blob/master/extra-subscription-feature.md
+        """
+        expire = int(datetime.datetime.timestamp(self.level_expire_time))
+        info = f"upload={self.upload_traffic}; download={self.download_traffic}; total={self.total_traffic}; expire={expire}"
+
+        return {"Subscription-Userinfo:": info}
 
 
 class UserMixin:
@@ -327,7 +346,9 @@ class UserOrder(models.Model, UserMixin):
 
     @classmethod
     def gen_out_trade_no(cls):
-        return datetime.datetime.fromtimestamp(time.time()).strftime("%Y%m%d%H%M%S%s")
+        "凑一个 32 位长的字符串"
+        dt_str = datetime.datetime.fromtimestamp(time.time()).strftime("%Y%m%d%H%M%S%s")
+        return f"{dt_str}r{random.randint(1000000,9999999)}"
 
     @classmethod
     def get_not_paid_order_by_amount(cls, user, amount):
@@ -411,21 +432,24 @@ class UserOrder(models.Model, UserMixin):
             return success
 
     @classmethod
-    @cache.cached(ttl=c.CACHE_TTL_MONTH)
-    def _get_success_order_count(cls, dt: pendulum.DateTime):
+    def get_success_order_count(cls, dt: pendulum.DateTime):
         return cls.objects.filter(
             created_at__range=[dt.start_of("day"), dt.end_of("day")],
             status=cls.STATUS_FINISHED,
         ).count()
 
     @classmethod
-    def get_success_order_count(cls, date: pendulum.DateTime):
-        """获取指定日期的订单数量,只有今天的数据会hit db"""
-        date = date.start_of("day")
-        today = utils.get_current_datetime()
-        if date.date() == today.date():
-            return cls._get_success_order_count.uncached(cls, date)
-        return cls._get_success_order_count(date)
+    def get_success_order_amount(cls, date: pendulum.DateTime):
+        return (
+            cls.objects.filter(
+                status=cls.STATUS_FINISHED,
+                created_at__range=[
+                    date.start_of("day"),
+                    date.end_of("day"),
+                ],
+            ).aggregate(amount=models.Sum("amount"))["amount"]
+            or "0"
+        )
 
     def handle_paid(self):
         # NOTE Must use in transaction
@@ -443,7 +467,10 @@ class UserOrder(models.Model, UserMixin):
         changed = False
         if self.status != self.STATUS_CREATED:
             return changed
-        res = pay.trade_query(out_trade_no=self.out_trade_no)
+        try:
+            res = pay.trade_query(out_trade_no=self.out_trade_no)
+        except timeout:
+            return False
         if res.get("trade_status", "") == "TRADE_SUCCESS":
             self.status = self.STATUS_PAID
             self.save()
@@ -477,7 +504,7 @@ class UserRefLog(models.Model, UserMixin):
         aggs = cls.objects.filter(user_id=user_id).aggregate(
             register_count=models.Sum("register_count")
         )
-        return aggs["register_count"] if aggs["register_count"] else 0
+        return aggs["register_count"] or 0
 
 
 class UserCheckInLog(models.Model, UserMixin):
@@ -509,8 +536,8 @@ class UserCheckInLog(models.Model, UserMixin):
         return cls.objects.filter(user_id=user_id, date=pendulum.today()).exists()
 
     @classmethod
-    def get_today_checkin_user_count(cls):
-        return cls.objects.filter(date=pendulum.today()).count()
+    def get_checkin_user_count(cls, date: pendulum.Date):
+        return cls.objects.filter(date=date).count()
 
     @property
     def human_increased_traffic(self):
@@ -573,6 +600,10 @@ class InviteCode(models.Model):
     def consume(self):
         self.used = True
         self.save()
+
+    @property
+    def used_cn(self):
+        return "已使用" if self.used else "未使用"
 
 
 class RebateRecord(models.Model, UserMixin):
@@ -692,11 +723,17 @@ class MoneyCode(models.Model):
     def __str__(self):
         return self.code
 
+    @property
+    def isused_cn(self):
+        return "已使用" if self.isused else "未使用"
+
 
 class Goods(models.Model):
     """商品"""
 
-    STATUS_TYPE = ((1, "上架"), (-1, "下架"))
+    STATUS_ON = 1
+    STATUS_OFF = -1
+    STATUS_TYPE = ((STATUS_ON, "上架"), (STATUS_OFF, "下架"))
 
     name = models.CharField(verbose_name="商品名字", max_length=128, default="待编辑")
     content = models.CharField(verbose_name="商品描述", max_length=256, default="待编辑")
@@ -721,6 +758,11 @@ class Goods(models.Model):
     )
     status = models.SmallIntegerField("商品状态", default=1, choices=STATUS_TYPE)
     order = models.PositiveSmallIntegerField("排序", default=1)
+    user_purchase_count = models.IntegerField(
+        "每名用户可购买数量",
+        default=0,
+        help_text="0表示不限制",
+    )
 
     class Meta:
         verbose_name = "商品"
@@ -730,19 +772,48 @@ class Goods(models.Model):
     def __str__(self):
         return self.name
 
+    @classmethod
+    def get_user_can_buy_goods(cls, user: User):
+        return [
+            good
+            for good in cls.objects.filter(status=cls.STATUS_ON)
+            if good.user_can_buy(user)
+        ]
+
     @property
     def total_transfer(self):
         """增加的流量"""
         return traffic_format(self.transfer)
 
-    def get_days(self):
-        """返回增加的天数"""
-        return "{}".format(self.days)
+    @property
+    def status_cn(self):
+        if self.status == self.STATUS_ON:
+            return "上架"
+        else:
+            return "下架"
+
+    @property
+    def bulma_color(self):
+        """bulma的颜色 虽然不该写在这里,但是前端太苦手了算啦"""
+        if self.days <= 10:
+            return "is-info"
+        elif 10 < self.days <= 30:
+            return "is-success"
+        elif 30 < self.days <= 100:
+            return "is-warning"
+        return "is-danger is-active"
+
+    def user_can_buy(self, user: User):
+        return not (
+            self.user_purchase_count > 0
+            and PurchaseHistory.get_by_user_and_good(user, self).count()
+            >= self.user_purchase_count
+        )
 
     @transaction.atomic
     def purchase_by_user(self, user):
         """购买商品 返回是否成功"""
-        if user.balance < self.money:
+        if user.balance < self.money or not self.user_can_buy(user):
             return False
         # 验证成功进行提权操作
         user.balance -= self.money
@@ -755,11 +826,18 @@ class Goods(models.Model):
             user.level_expire_time = now + days
             user.reset_traffic(self.transfer)
         user.level = self.level
-        user.save()
-        # 增加购买记录
-        PurchaseHistory.add_log(
-            good_name=self.name, username=user.username, money=self.money
+        user.save(
+            update_fields=[
+                "level",
+                "balance",
+                "total_traffic",
+                "upload_traffic",
+                "download_traffic",
+                "level_expire_time",
+            ]
         )
+        # 增加购买记录
+        PurchaseHistory.add_log(good=self, user=user)
         inviter = User.get_or_none(user.inviter_id)
         if inviter and inviter != user:
             # 增加返利记录
@@ -769,14 +847,16 @@ class Goods(models.Model):
                 money=self.money * Decimal(settings.INVITE_PERCENT),
             )
             inviter.balance += rebaterecord.money
-            inviter.save()
+            inviter.save(update_fields=["balance"])
             rebaterecord.save()
         return True
 
 
 class PurchaseHistory(models.Model):
-    """购买记录"""
+    """用户购买记录"""
 
+    good_id = models.IntegerField("商品ID", default=12, db_index=True)
+    user_id = models.IntegerField("用户ID", default=12, db_index=True)
     good_name = models.CharField(verbose_name="商品名", max_length=128, db_index=True)
     user = models.CharField(verbose_name="购买者", max_length=128)
     money = models.DecimalField(
@@ -793,8 +873,8 @@ class PurchaseHistory(models.Model):
         return self.user
 
     class Meta:
-        verbose_name = "购买记录"
-        verbose_name_plural = "购买记录"
+        verbose_name = "用户购买记录"
+        verbose_name_plural = "用户购买记录"
         ordering = ("-created_at",)
 
     @classmethod
@@ -825,8 +905,18 @@ class PurchaseHistory(models.Model):
         return User.objects.find(username__in=username_list)
 
     @classmethod
-    def add_log(cls, good_name, username, money):
-        cls.objects.create(good_name=good_name, user=username, money=money)
+    def add_log(cls, good, user):
+        cls.objects.create(
+            good_name=good.name,
+            good_id=good.id,
+            user=user.username,
+            user_id=user.id,
+            money=good.money,
+        )
+
+    @classmethod
+    def get_by_user_and_good(cls, user, good):
+        return cls.objects.filter(user_id=user.id, good_id=good.id)
 
 
 class Announcement(models.Model):
@@ -902,356 +992,5 @@ class EmailSendLog(models.Model):
         verbose_name_plural = "邮件发送记录"
 
     @classmethod
-    def send_mail_to_users(cls, users, subject, message):
-        address = [user.email for user in users]
-        if send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, address):
-            logs = [cls(user=user, subject=subject, message=message) for user in users]
-            cls.objects.bulk_create(logs)
-            print(f"send email success user: address: {address}")
-        else:
-            raise Exception(f"Could not send mail {address} subject: {subject}")
-
-    @classmethod
     def get_user_dict_by_subject(cls, subject):
         return {l.user: 1 for l in cls.objects.filter(subject=subject)}
-
-
-class UserSubLog(models.Model):
-    SUB_TYPES = (
-        ("ss", "订阅SS"),
-        ("vless", "订阅Vless"),
-        ("trojan", "订阅Trojan"),
-        ("clash", "订阅Clash"),
-        ("clash_pro", "订阅ClashPro"),
-    )
-
-    user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="用户")
-    sub_type = models.CharField("订阅类型", choices=SUB_TYPES, max_length=20)
-    ip = models.CharField(max_length=128, verbose_name="IP地址")
-    created_at = models.DateTimeField(
-        auto_now_add=True, db_index=True, help_text="创建时间", verbose_name="创建时间"
-    )
-
-    class Meta:
-        verbose_name = "用户订阅记录"
-        verbose_name_plural = "用户订阅记录"
-        ordering = ["-created_at"]
-        index_together = ["user", "created_at"]
-
-    @classmethod
-    def add_log(cls, user, sub_type, ip):
-        return cls.objects.create(user=user, sub_type=sub_type, ip=ip)
-
-
-# TODO del those model 下面几张表都挪走啦，过段时间删掉，留在这里是怕需要迁移数据
-
-
-class UserOnLineIpLog(models.Model, UserMixin):
-
-    user_id = models.IntegerField(db_index=True)
-    node_id = models.IntegerField()
-    ip = models.CharField(max_length=128)
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        verbose_name_plural = "用户在线IP"
-        ordering = ["-created_at"]
-        index_together = ["node_id", "created_at"]
-
-
-class NodeOnlineLog(models.Model):
-    # NOTE add trojan
-    NODE_TYPE_SS = "ss"
-    NODE_TYPE_VMESS = "vmess"
-    NODE_TYPE_TROJAN = "trojan"
-    NODE_CHOICES = (
-        (NODE_TYPE_SS, NODE_TYPE_SS),
-        (NODE_TYPE_VMESS, NODE_TYPE_VMESS),
-        (NODE_TYPE_TROJAN, NODE_TYPE_TROJAN),
-    )
-
-    node_id = models.IntegerField()
-    node_type = models.CharField(
-        "节点类型", default=NODE_TYPE_SS, choices=NODE_CHOICES, max_length=32
-    )
-    online_user_count = models.IntegerField(default=0)
-    active_tcp_connections = models.IntegerField(default=0)
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        verbose_name_plural = "节点在线记录"
-        ordering = ["-created_at"]
-        index_together = ["node_type", "node_id", "created_at"]
-
-
-class BaseAbstractNode(models.Model):
-
-    node_id = models.IntegerField(unique=True)
-    level = models.PositiveIntegerField(default=0)
-    name = models.CharField("名字", max_length=32)
-    info = models.CharField("节点说明", max_length=1024)
-    country = models.CharField(
-        "国家", default="CN", max_length=5, choices=c.COUNTRIES_CHOICES
-    )
-    used_traffic = models.BigIntegerField("已用流量", default=0)
-    total_traffic = models.BigIntegerField("总流量", default=settings.GB)
-    enable = models.BooleanField("是否开启", default=True, db_index=True)
-    enlarge_scale = models.DecimalField(
-        "倍率",
-        default=Decimal("1.0"),
-        decimal_places=2,
-        max_digits=10,
-    )
-
-    ehco_listen_host = models.CharField("隧道监听地址", max_length=64, blank=True, null=True)
-    ehco_listen_port = models.CharField("隧道监听端口", max_length=64, blank=True, null=True)
-    ehco_listen_type = models.CharField(
-        "隧道监听类型", max_length=64, choices=c.LISTEN_TYPES, default=c.LISTEN_RAW
-    )
-    ehco_transport_type = models.CharField(
-        "隧道传输类型", max_length=64, choices=c.TRANSPORT_TYPES, default=c.TRANSPORT_RAW
-    )
-    enable_ehco_lb = models.BooleanField("是否负载均衡", default=True, db_index=True)
-
-    class Meta:
-        abstract = True
-
-
-class RelayNode(BaseAbstractNode):
-
-    CMCC = "移动"
-    CUCC = "联通"
-    CTCC = "电信"
-    BGP = "BGP"
-    ISP_TYPES = (
-        (CMCC, "移动"),
-        (CUCC, "联通"),
-        (CTCC, "电信"),
-        (BGP, "BGP"),
-    )
-
-    #  去除一些不需要的字段
-    info = None
-    used_traffic = None
-    total_traffic = None
-    enlarge_scale = None
-    ehco_listen_host = None
-    ehco_listen_port = None
-    enable_ehco_lb = None
-    ehco_ss_lb_port = models.IntegerField(
-        "ss负载均衡端口", help_text="ss负载均衡端口", null=True, blank=True
-    )
-    ehco_vmess_lb_port = models.IntegerField(
-        "vmess负载均衡端口", help_text="vmess负载均衡端口", null=True, blank=True
-    )
-    ehco_trojan_lb_port = models.IntegerField(
-        "trojan负载均衡端口", help_text="trojan负载均衡端口", null=True, blank=True
-    )
-
-    server = models.CharField("服务器地址", max_length=128)
-    isp = models.CharField("ISP线路", max_length=64, choices=ISP_TYPES, default=BGP)
-
-    class Meta:
-        verbose_name_plural = "中转节点"
-
-
-class TrojanNode(BaseAbstractNode):
-
-    BASE_CONFIG = {
-        "stats": {},
-        "api": {"tag": "api", "services": ["HandlerService", "StatsService"]},
-        "log": {"loglevel": "info"},
-        "policy": {
-            "system": {"statsInboundUplink": True, "statsInboundDownlink": True},
-        },
-        "inbounds": [],
-        "outbounds": [{"protocol": "freedom", "settings": {}}],
-        "routing": {
-            "settings": {
-                "rules": [
-                    {"inboundTag": ["api"], "outboundTag": "api", "type": "field"}
-                ]
-            },
-            "strategy": "rules",
-        },
-    }
-
-    server = models.CharField("服务器地址", max_length=128)
-    inbound_tag = models.CharField("标签", default="proxy", max_length=64)
-    service_port = models.IntegerField("服务端端口", default=443)
-    client_port = models.IntegerField("客户端端口", default=443)
-    listen_host = models.CharField("本地监听地址", max_length=64, default="0.0.0.0")
-    grpc_host = models.CharField("grpc地址", max_length=64, default="0.0.0.0")
-    grpc_port = models.CharField("grpc端口", max_length=64, default="8080")
-    network = models.CharField("连接方式", max_length=64, default="tcp")
-    security = models.CharField("加密方式", max_length=64, default="tls")
-    skip_cert_verify = models.BooleanField(
-        "是否允许不安全连接(跳过tls验证)", default=False, db_index=False
-    )
-    alpn = models.CharField("alpn", max_length=64, default="http/1.1")
-    certificate_file = models.CharField("crt地址", max_length=64, default="path/to/cert")
-    key_file = models.CharField("key地址", max_length=64, default="path/to/cert")
-
-    class Meta:
-        verbose_name_plural = "Trojan节点"
-
-
-class VmessNode(BaseAbstractNode):
-
-    BASE_CONFIG = {
-        "stats": {},
-        "api": {"tag": "api", "services": ["HandlerService", "StatsService"]},
-        "log": {"loglevel": "info"},
-        "policy": {
-            "system": {"statsInboundUplink": True, "statsInboundDownlink": True},
-        },
-        "inbounds": [],
-        "outbounds": [{"protocol": "freedom", "settings": {}}],
-        "routing": {
-            "settings": {
-                "rules": [
-                    {"inboundTag": ["api"], "outboundTag": "api", "type": "field"}
-                ]
-            },
-            "strategy": "rules",
-        },
-    }
-
-    server = models.CharField("服务器地址", max_length=128)
-    inbound_tag = models.CharField("标签", default="proxy", max_length=64)
-    service_port = models.IntegerField("服务端端口", default=10086)
-    client_port = models.IntegerField("客户端端口", default=10086)
-    alter_id = models.IntegerField("额外ID数量", default=1)
-    listen_host = models.CharField("本地监听地址", max_length=64, default="0.0.0.0")
-    grpc_host = models.CharField("grpc地址", max_length=64, default="0.0.0.0")
-    grpc_port = models.CharField("grpc端口", max_length=64, default="8080")
-    ws_host = models.CharField("域名", max_length=64, blank=True, null=True)
-    ws_path = models.CharField("ws_path", max_length=64, blank=True, null=True)
-
-    class Meta:
-        verbose_name_plural = "Vmess节点"
-
-
-class SSNode(BaseAbstractNode):
-    KB = 1024
-    MEGABIT = KB * 125
-
-    server = models.CharField("服务器地址", help_text="支持逗号分隔传多个地址", max_length=128)
-    method = models.CharField(
-        "加密类型", default=settings.DEFAULT_METHOD, max_length=32, choices=c.METHOD_CHOICES
-    )
-    speed_limit = models.IntegerField("限速", default=0)
-    port = models.IntegerField("单端口", help_text="单端口多用户端口", null=True, blank=True)
-
-    class Meta:
-        verbose_name_plural = "SS节点"
-
-
-class BaseRelayRule(models.Model):
-
-    relay_port = models.CharField("中转端口", max_length=64, blank=False, null=False)
-    listen_type = models.CharField(
-        "监听类型", max_length=64, choices=c.LISTEN_TYPES, default=c.LISTEN_RAW
-    )
-    transport_type = models.CharField(
-        "传输类型", max_length=64, choices=c.TRANSPORT_TYPES, default=c.TRANSPORT_RAW
-    )
-
-    class Meta:
-        abstract = True
-
-
-class TrojanRelayRule(BaseRelayRule):
-
-    trojan_node = models.ForeignKey(
-        TrojanNode,
-        on_delete=models.CASCADE,
-        verbose_name="Trojan节点",
-        related_name="relay_rules",
-    )
-    relay_node = models.ForeignKey(
-        RelayNode,
-        on_delete=models.SET_NULL,
-        verbose_name="中转节点",
-        blank=True,
-        null=True,
-        related_name="trojan_relay_rules",
-    )
-
-    class Meta:
-        verbose_name_plural = "Trojan转发规则"
-
-
-class VmessRelayRule(BaseRelayRule):
-
-    vmess_node = models.ForeignKey(
-        VmessNode,
-        on_delete=models.CASCADE,
-        verbose_name="Vmess节点",
-        related_name="relay_rules",
-    )
-    relay_node = models.ForeignKey(
-        RelayNode,
-        on_delete=models.SET_NULL,
-        verbose_name="中转节点",
-        blank=True,
-        null=True,
-        related_name="vmess_relay_rules",
-    )
-
-    class Meta:
-        verbose_name_plural = "Vmess转发规则"
-
-
-class SSRelayRule(BaseRelayRule):
-
-    ss_node = models.ForeignKey(
-        SSNode,
-        on_delete=models.CASCADE,
-        verbose_name="SS节点",
-        related_name="relay_rules",
-    )
-    relay_node = models.ForeignKey(
-        RelayNode,
-        on_delete=models.SET_NULL,
-        verbose_name="中转节点",
-        blank=True,
-        null=True,
-        related_name="ss_relay_rules",
-    )
-
-    class Meta:
-        verbose_name_plural = "SS转发规则"
-
-
-class UserTrafficLog(models.Model, UserMixin):
-    NODE_TYPE_SS = "ss"
-    NODE_TYPE_VMESS = "vmess"
-    NODE_TYPE_TROJAN = "trojan"
-    NODE_CHOICES = (
-        (NODE_TYPE_SS, NODE_TYPE_SS),
-        (NODE_TYPE_VMESS, NODE_TYPE_VMESS),
-        (NODE_TYPE_TROJAN, NODE_TYPE_TROJAN),
-    )
-    NODE_MODEL_DICT = {
-        NODE_TYPE_SS: SSNode,
-        NODE_TYPE_VMESS: VmessNode,
-        NODE_TYPE_TROJAN: TrojanNode,
-    }
-
-    user_id = models.IntegerField()
-    node_type = models.CharField(
-        "节点类型", default=NODE_TYPE_SS, choices=NODE_CHOICES, max_length=32
-    )
-    node_id = models.IntegerField()
-    date = models.DateTimeField(auto_now_add=True, db_index=True)
-    upload_traffic = models.BigIntegerField("上传流量", default=0)
-    download_traffic = models.BigIntegerField("下载流量", default=0)
-
-    class Meta:
-        verbose_name_plural = "流量记录"
-        ordering = ["-date"]
-        index_together = ["user_id", "node_type", "node_id", "date"]
-
-
-# END TODO del

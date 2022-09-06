@@ -2,13 +2,14 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db import transaction
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import render
 from django.urls import reverse
 from django.views import View
 
 from apps.constants import THEME_CHOICES
-from apps.proxy.models import ProxyNode, UserOnLineIpLog
+from apps.proxy.models import ProxyNode
 from apps.sspanel.forms import LoginForm, RegisterForm
 from apps.sspanel.models import (
     Announcement,
@@ -148,7 +149,6 @@ class UserInfoView(LoginRequiredMixin, View):
             "max_traffic": max_traffic,
             "themes": THEME_CHOICES,
             "sub_link": user.sub_link,
-            "online_device_count": UserOnLineIpLog.get_user_online_device_count(user),
         }
         return render(request, "sspanel/userinfo.html", context=context)
 
@@ -167,24 +167,19 @@ class NodeInfoView(LoginRequiredMixin, View):
         return render(request, "sspanel/nodeinfo.html", context=context)
 
 
-class UserTrafficLog(LoginRequiredMixin, View):
+class UserTrafficLogView(LoginRequiredMixin, View):
     def get(self, request):
         node_list = ProxyNode.get_active_nodes()
-        context = {
-            "user": request.user,
-            "node_list": node_list,
-            "online_device_count": UserOnLineIpLog.get_user_online_device_count(
-                request.user
-            ),
-        }
+        context = {"user": request.user, "node_list": node_list}
         return render(request, "sspanel/user_traffic_log.html", context=context)
 
 
 class ShopView(LoginRequiredMixin, View):
     def get(self, request):
-        user = request.user
-        goods = Goods.objects.filter(status=1)
-        context = {"user": user, "goods": goods}
+        context = {
+            "user": request.user,
+            "goods": Goods.get_user_can_buy_goods(request.user),
+        }
         return render(request, "sspanel/shop.html", context=context)
 
 
@@ -192,14 +187,6 @@ class ClientView(LoginRequiredMixin, View):
     def get(self, request):
         """跳转到客户端界面"""
         return render(request, "sspanel/client.html")
-
-
-class DonateView(LoginRequiredMixin, View):
-    def get(self, request):
-        """捐赠界面和支付宝当面付功能"""
-        donatelist = Donate.objects.all()[:8]
-        context = {"donatelist": donatelist}
-        return render(request, "sspanel/donate.html", context=context)
 
 
 class PurchaseLogView(LoginRequiredMixin, View):
@@ -216,9 +203,11 @@ class ChargeView(LoginRequiredMixin, View):
         """充值界面的跳转"""
         user = request.user
         codelist = MoneyCode.objects.filter(user=user)
-        context = {"user": user, "codelist": codelist}
+        donatelist = Donate.objects.all()[:8]
+        context = {"user": user, "codelist": codelist, "donatelist": donatelist}
         return render(request, "sspanel/chargecenter.html", context=context)
 
+    @transaction.atomic
     def post(self, request):
         user = request.user
         input_code = request.POST.get("chargecode")
@@ -241,8 +230,6 @@ class ChargeView(LoginRequiredMixin, View):
                 code.isused = True
                 user.save()
                 code.save()
-                # 将充值记录和捐赠绑定
-                Donate.objects.create(user=user, money=code.number)
                 messages.success(request, "请去商店购买商品！", extra_tags="充值成功！")
                 return HttpResponseRedirect(reverse("sspanel:chargecenter"))
 

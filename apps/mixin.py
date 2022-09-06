@@ -1,12 +1,10 @@
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import ValidationError
 from django.db import connection, models, transaction
 from django.db.models.signals import post_delete, post_save, pre_save
-from django.http import HttpResponseForbidden
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-
-from apps.ext import cache
 
 
 class CSRFExemptMixin:
@@ -18,15 +16,8 @@ class CSRFExemptMixin:
 class StaffRequiredMixin(LoginRequiredMixin):
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_staff:
-            return HttpResponseForbidden()
+            return redirect_to_login(request.get_full_path())
         return super().dispatch(request, *args, **kwargs)
-
-
-class CacheMixin:
-    @classmethod
-    @cache.cached()
-    def get_by_id_with_cache(cls, id):
-        return cls.objects.get(id=id)
 
 
 class BaseModel(models.Model):
@@ -94,27 +85,19 @@ class SequenceMixin(models.Model):
         else:
             for idx, instance in enumerate(instance_list):
                 if instance.sequence >= new_sequence:
-                    if move_direction == self.MOVE_FORWARD:
-                        target_idx = idx
-                    else:
-                        target_idx = idx + 1
+                    target_idx = idx if move_direction == self.MOVE_FORWARD else idx + 1
                     instance_list.insert(target_idx, self)
                     break
-        seq = 1
-        for instance in instance_list:
+        for seq, instance in enumerate(instance_list, start=1):
             instance.sequence = seq
-            seq += 1
-
         cls = type(self)
         cls.objects.bulk_update(instance_list, ["sequence"])
 
     def update_all_sequence(self):
         cls = type(self)
         instance_list = list(cls.objects.all().order_by("sequence"))
-        seq = 1
-        for instance in instance_list:
+        for seq, instance in enumerate(instance_list, start=1):
             instance.sequence = seq
-            seq += 1
         cls = type(self)
         cls.objects.bulk_update(instance_list, ["sequence"])
 

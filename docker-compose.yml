@@ -9,7 +9,7 @@ volumes:
 
 services:
   nginx:
-    image: nginx:1.7.9
+    image: nginx:1.20.1
     environment:
       TZ: ${TZ:-Asia/Shanghai}
     restart: always
@@ -24,11 +24,11 @@ services:
     networks:
       - sspanel
   mysql:
-    image: mysql:5.6
+    image: mysql:5.7
     container_name: mysql
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-yourpass}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-yourpass}
       MYSQL_DATABASE: sspanel
     volumes:
       - ./configs/mysqld/mysqld_charset.cnf:/etc/mysql/conf.d/mysqld_charset.cnf
